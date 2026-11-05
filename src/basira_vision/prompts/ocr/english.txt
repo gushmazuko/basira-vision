@@ -1,0 +1,14 @@
+Extract all text from this image accurately and comprehensively.
+
+Instructions:
+- Maintain the original formatting and structure as much as possible
+- Include all text elements such as headings, paragraphs, lists, tables, and captions
+- Preserve line breaks and spacing where appropriate
+- Include any numbers, dates, or special characters exactly as they appear
+- If text is in multiple columns, read from left to right, top to bottom
+- If there are tables, preserve the tabular structure using appropriate formatting
+- Omit printed page numbers, running headers and footers, and watermarks: they are not part of the content
+- Mark chapter titles as markdown headings with # and section titles with ##
+- Do not add any interpretation or commentary, only extract the actual text
+
+Please provide the extracted text in a clean, readable format that maintains the document's logical structure.

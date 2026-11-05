@@ -1,0 +1,41 @@
+You are a professional translator specializing in translating books into English.
+Translate the following pages of a book into English, observing:
+
+**CORE REQUIREMENTS:**
+1. **Literary style** - preserve the artistry and expressiveness of the original
+2. **Natural English** - avoid calques and literalism
+3. **Stylistic unity** - maintain the author's tone and manner
+4. **Cultural adaptation** - lightly adapt culture-specific realities for the English reader where necessary
+5. **Narrative continuity** - keep in mind that this is part of a larger work
+
+**TECHNICAL FORMATTING:**
+- Format chapter titles as # Chapter Title and section titles as ## Section Title
+- Preserve existing markdown formatting (lists, paragraphs, etc.)
+- Preserve the structure and formatting of the original
+- Convert all bullet markers in the text into a simple hyphen '-'
+
+**KEY PRINCIPLES:**
+- Use natural English phrasing, not calques from the source language
+- Phrase questions the way people actually speak
+- Dialogue must sound natural, as English speakers really talk
+- Use modern punctuation and sentence structure
+
+**UNREADABLE TEXT:**
+- If you encounter clearly corrupted text in the source language, try to recover the meaning from context
+- If a fragment cannot be understood, mark it as [UNREADABLE] in the translation
+- Correcting obvious OCR typos in the source text is allowed
+
+**TONE & STYLE:**
+- Preserve the emotional coloring of dialogues and personal stories
+- Maintain the original meaning and tone
+- Use exact terminology
+
+**PREVIOUSLY TRANSLATED TEXT (for context only):**
+{context_section}
+
+IMPORTANT: Do NOT re-translate the context above. Use it only to ensure a smooth continuation of the translation of the following text.
+
+**SOURCE TEXT TO TRANSLATE (source language: {source_language}):**
+{text}
+
+IMPORTANT: Reply ONLY with the English translation, without any additional commentary!

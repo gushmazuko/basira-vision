@@ -1,0 +1,16 @@
+Extraire tout le texte de cette image de manière précise et complète.
+
+Instructions:
+- Maintenir le formatage et la structure d'origine autant que possible
+- Inclure tous les éléments textuels tels que les titres, paragraphes, listes, tableaux et légendes
+- Préserver les sauts de ligne et l'espacement le cas échéant
+- Inclure tous les chiffres, dates ou caractères spéciaux exactement comme ils apparaissent
+- Si le texte est en plusieurs colonnes, lire de gauche à droite, de haut en bas
+- S'il y a des tableaux, préserver la structure tabulaire en utilisant un formatage approprié
+- Inclure les accents français (à, é, è, ç, ù, etc.) correctement
+- Respecter la ponctuation française (guillemets « », points, virgules)
+- Omettre les numéros de page imprimés, les en-têtes et pieds de page courants et les filigranes : ils ne font pas partie du contenu
+- Marquer les titres de chapitres comme titres markdown avec # et les titres de sections avec ##
+- Ne pas ajouter d'interprétation ou de commentaire, extraire uniquement le texte réel
+
+Veuillez fournir le texte extrait dans un format propre et lisible qui maintient la structure logique du document.

@@ -1,0 +1,27 @@
+Extract all text from this image accurately and comprehensively, with special focus on Chechen text.
+
+Instructions:
+- Maintain the original formatting and structure as much as possible.
+- Include all text elements: headings, paragraphs, lists, tables, and captions.
+- Preserve line breaks and spacing according to the visual layout.
+- Include any numbers, dates, or special characters exactly as they appear.
+- If text is in multiple columns, read columns from left to right, and text within each column from top to bottom.
+- If there are tables, preserve the tabular structure using appropriate formatting.
+- Omit printed page numbers, running headers and footers, and watermarks: they are not part of the content.
+- Mark chapter titles as markdown headings with # and section titles with ##.
+- Do not add any interpretation or commentary, only extract the actual text.
+
+CHECHEN-SPECIFIC RULES:
+- Chechen is written in the CYRILLIC script (Russian-based alphabet), NOT in Arabic script. Never substitute Arabic or Latin letters for Chechen Cyrillic letters.
+- The palochka letter — uppercase Ӏ (U+04C0, CYRILLIC CAPITAL LETTER PALOCHKA) and lowercase ӏ (U+04CF, CYRILLIC SMALL LETTER PALOCHKA) — looks like a plain vertical bar and is the most commonly misrecognized character in Chechen text.
+- Vision models typically replace the palochka with Latin I, i, l, or J, the digit 1, an apostrophe ', or a pipe |.
+- These substitutions are errors and must never appear in the output.
+- REQUIRED: always transcribe the palochka with its dedicated Unicode codepoint (U+04C0 for uppercase, U+04CF for lowercase), never with a lookalike character, and preserve its case exactly as written.
+- The palochka appears standalone (e.g. йоӏ, Ӏа).
+- It also appears inside digraphs marking ejective consonants (кӏ, пӏ, тӏ, цӏ, чӏ) and in хӏ.
+- Do not confuse хӏ (ha + palochka) with other х-combinations such as хь or хар.
+- Preserve Cyrillic digraphs exactly as printed: аь, еь, оь, уь, юь, кх, къ, гӏ, ай, etc. Do not merge or split them into single letters.
+- Preserve Ё/ё and all diacritics exactly as printed.
+- If a character is ambiguous, decide between the palochka and its lookalikes based on Chechen vocabulary and grammar, not visual similarity alone.
+
+Please provide the extracted text in a clean, readable format that maintains the document's logical structure.

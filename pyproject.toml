@@ -1,0 +1,88 @@
+[build-system]
+requires = ["hatchling >= 1.26"]
+build-backend = "hatchling.build"
+
+[project]
+name = "basira-vision"
+dynamic = ["version"]
+description = "Turn a scanned book into a typeset edition in another language: vision OCR, sliding-window translation, Typst typesetting"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [
+    {name = "gushmazuko"},
+]
+keywords = ["ocr", "vision", "translation", "gemini", "typst", "pandoc", "book", "pdf"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: End Users/Desktop",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Text Processing :: Linguistic",
+    "Topic :: Scientific/Engineering :: Image Recognition",
+]
+dependencies = [
+    "click>=8.1",
+    "rich>=13.0",
+    "PyMuPDF>=1.24.3",
+    "Pillow>=10.0",
+    "google-genai>=2.23,<3",
+    "httpx>=0.28,<1",
+    "pydantic>=2.0",
+    "pydantic-settings>=2.0",
+    "PyYAML>=6.0",
+]
+
+[project.scripts]
+basira = "basira_vision.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/gushmazuko/basira-vision"
+Repository = "https://github.com/gushmazuko/basira-vision"
+Issues = "https://github.com/gushmazuko/basira-vision/issues"
+Changelog = "https://github.com/gushmazuko/basira-vision/blob/main/CHANGELOG.md"
+
+[tool.hatch.version]
+path = "src/basira_vision/__init__.py"
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "/src",
+    "/tests",
+    "/LICENSE",
+    "/README.md",
+    "/CHANGELOG.md",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/basira_vision"]
+
+[tool.hatch.envs.default]
+dependencies = ["pytest>=7.0"]
+
+[tool.hatch.envs.default.scripts]
+test = "pytest {args}"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+filterwarnings = [
+    # third-party import-time noise (PyMuPDF SWIG bindings, google-genai typing)
+    "ignore::DeprecationWarning:importlib._bootstrap",
+    "ignore::DeprecationWarning:google.genai.*",
+]
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP"]
+ignore = ["UP006", "UP007", "UP035", "UP045"]

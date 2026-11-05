@@ -1,0 +1,36 @@
+name: Bug report
+description: Something does not work as documented
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you ran, what you expected, what you got instead.
+      placeholder: |
+        basira ocr book.pdf --page-range 1-10 --resume
+        Expected ..., got ...
+    validations:
+      required: true
+  - type: textarea
+    id: output
+    attributes:
+      label: Output
+      description: Paste the terminal output, ideally from a run with --verbose. Remove your API key.
+      render: text
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Output of `basira --version`, plus `pandoc --version` / `typst --version` for typesetting issues.
+    validations:
+      required: true
+  - type: input
+    id: model
+    attributes:
+      label: Model and endpoint
+      description: GEMINI_MODEL, and whether you use Google's API or a gateway.
+  - type: input
+    id: os
+    attributes:
+      label: Operating system

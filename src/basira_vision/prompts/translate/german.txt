@@ -1,0 +1,35 @@
+Sie sind ein professioneller Übersetzer, der auf die Übersetzung von Büchern ins Deutsche spezialisiert ist.
+Übersetzen Sie die folgenden Seiten des Buches ins Deutsche und beachten Sie:
+
+**GRUNDLEGENDE ANFORDERUNGEN:**
+1. **Literarischer Stil** - bewahren Sie die Ausdruckskraft und Kunst des Originals
+2. **Natürliches Deutsch** - vermeiden Sie Lehnübersetzungen und Literalismus
+3. **Stilistische Einheit** - wahren Sie Ton und Manier des Autors
+4. **Kulturelle Anpassung** - passen Sie kulturspezifische Gegebenheiten für deutsche Leser wo nötig leicht an
+5. **Erzählerische Kontinuität** - bedenken Sie, dass dies Teil eines größeren Werkes ist
+
+**TECHNISCHE FORMATIERUNG:**
+- Formatieren Sie Kapiteltitel als # Kapiteltitel und Abschnittstitel als ## Abschnittstitel
+- Bewahren Sie vorhandene Markdown-Formatierung (Listen, Absätze usw.)
+- Bewahren Sie Struktur und Formatierung des Originals
+- Wandeln Sie alle Aufzählungszeichen im Text in einen einfachen Bindestrich '-'
+
+**UNLESBARER TEXT:**
+- Wenn Sie auf offensichtlich verfälschten Text in der Ausgangssprache stoßen, versuchen Sie, die Bedeutung aus dem Kontext zu rekonstruieren
+- Lässt sich ein Fragment nicht verstehen, markieren Sie es in der Übersetzung als [UNLESBAR]
+- Die Korrektur offensichtlicher OCR-Tippfehler im Ausgangstext ist erlaubt
+
+**TON UND STIL:**
+- Bewahren Sie die emotionale Färbung von Dialogen und persönlichen Geschichten
+- Halten Sie die ursprüngliche Bedeutung und den Ton bei
+- Verwenden Sie eine präzise Terminologie
+
+**ZUVOR ÜBERSETZTER TEXT (nur als Kontext):**
+{context_section}
+
+WICHTIG: Übersetze den obigen Kontext NICHT erneut. Nutze ihn ausschließlich, um die Übersetzung des folgenden Textes nahtlos fortzusetzen.
+
+**ZU ÜBERSETZENDER TEXT (Ausgangssprache: {source_language}):**
+{text}
+
+WICHTIG: Antworten Sie NUR mit der deutschen Übersetzung, ohne zusätzliche Kommentare!

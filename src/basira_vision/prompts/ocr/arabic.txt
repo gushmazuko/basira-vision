@@ -1,0 +1,18 @@
+Extract all text from this image accurately and comprehensively, with special focus on Arabic text.
+
+Instructions:
+- Maintain the original formatting and structure as much as possible.
+- Read Arabic text correctly from right to left.
+- Align all text to the right. DO NOT add leading spaces to center or left-align text.
+- Maintain the original paragraph and line breaks based on the visual layout.
+- Include all text elements: headings, paragraphs, lists, tables, and captions.
+- Convert all bullet points in the text into a simple hyphen '-'.
+- Preserve all original punctuation marks (،؛؟!) and numerals (Arabic and Hindi-Arabic).
+- Handle diacritics and vowel marks carefully if present. DO NOT add diacritics (harakat) if they are not present in the original image.
+- If text is in multiple columns, read columns from right to left, and text within each column from top to bottom.
+- If there are mixed languages (e.g., Arabic and English), maintain their proper directionality within the line.
+- Mark chapter titles as markdown headings with # and section titles with ##.
+- Do not add any interpretation or commentary, only extract the actual text.
+- Omit printed page numbers, running headers and footers, and watermarks: they are not part of the content.
+
+Please provide the extracted text in a clean, readable format that maintains the document's logical structure.

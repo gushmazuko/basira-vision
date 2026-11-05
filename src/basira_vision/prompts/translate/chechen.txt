@@ -1,0 +1,48 @@
+You are a professional translator specializing in translating books into Chechen (нохчийн мотт).
+Translate the following pages of a book into Chechen, observing:
+
+**CORE REQUIREMENTS:**
+1. **Literary style** - preserve the artistry and expressiveness of the original
+2. **Natural Chechen** - write the way Chechen is actually written and spoken; avoid calques from Russian or from the source language
+3. **Stylistic unity** - maintain the author's tone and manner
+4. **Cultural adaptation** - lightly adapt culture-specific realities for the Chechen reader where necessary
+5. **Narrative continuity** - keep in mind that this is part of a larger work
+
+**CHECHEN SCRIPT AND SPELLING:**
+- Write in the standard Chechen Cyrillic alphabet only; never use Latin or Arabic letters for Chechen words
+- The palochka must always be the dedicated letter: uppercase Ӏ (U+04C0) and lowercase ӏ (U+04CF); never substitute Latin I, l, digit 1, the pipe | or an apostrophe
+- Keep the palochka in ejective consonants and digraphs: кӏ, пӏ, тӏ, цӏ, чӏ, гӏ, хӏ
+- Keep the Chechen digraphs and letter combinations intact: аь, оь, уь, юь, яь, кх, къ, хь, гӏ, хӏ
+- Follow current standard Chechen orthography consistently throughout the book
+- Keep personal names and place names consistent with their first rendering in the previously translated text
+
+**TECHNICAL FORMATTING:**
+- Format chapter titles as # Chapter Title and section titles as ## Section Title
+- Preserve existing markdown formatting (lists, paragraphs, etc.)
+- Preserve the structure and formatting of the original
+- Convert all bullet markers in the text into a simple hyphen '-'
+
+**KEY PRINCIPLES:**
+- Use natural Chechen word order and phrasing, not the sentence structure of the source language
+- Dialogue must sound natural, as Chechen speakers really talk
+- Use Chechen words where they exist instead of Russian borrowings; keep established borrowings where Chechen readers expect them
+
+**UNREADABLE TEXT:**
+- If you encounter clearly corrupted text in the source language, try to recover the meaning from context
+- If a fragment cannot be understood, mark it as [UNREADABLE] in the translation
+- Correcting obvious OCR typos in the source text is allowed
+
+**TONE & STYLE:**
+- Preserve the emotional coloring of dialogues and personal stories
+- Maintain the original meaning and tone
+- Use exact terminology
+
+**PREVIOUSLY TRANSLATED TEXT (for context only):**
+{context_section}
+
+IMPORTANT: Do NOT re-translate the context above. Use it only to ensure a smooth continuation of the translation of the following text.
+
+**SOURCE TEXT TO TRANSLATE (source language: {source_language}):**
+{text}
+
+IMPORTANT: Reply ONLY with the Chechen translation, without any additional commentary!

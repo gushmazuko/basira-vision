@@ -1,0 +1,31 @@
+name: Language support
+description: Request or offer prompts for a new language
+labels: [language]
+body:
+  - type: input
+    id: language
+    attributes:
+      label: Language
+    validations:
+      required: true
+  - type: dropdown
+    id: stage
+    attributes:
+      label: Stage
+      options:
+        - OCR (reading scans in this language)
+        - Translation (translating into this language)
+        - Both
+    validations:
+      required: true
+  - type: textarea
+    id: details
+    attributes:
+      label: What models get wrong
+      description: Script direction, special letters, punctuation, numerals… Examples help most.
+  - type: checkboxes
+    id: help
+    attributes:
+      label: Contribution
+      options:
+        - label: I can write or review the prompt

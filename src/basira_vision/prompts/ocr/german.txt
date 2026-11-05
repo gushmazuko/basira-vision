@@ -1,0 +1,18 @@
+Extrahiere den gesamten Text aus diesem Bild genau und vollständig.
+
+Anweisungen:
+- Behalte die ursprüngliche Formatierung und Struktur so weit wie möglich bei
+- Erfasse alle Textelemente wie Überschriften, Absätze, Listen, Tabellen und Bildunterschriften
+- Bewahre Zeilenumbrüche und Abstände, wo es sinnvoll ist
+- Gib alle Zahlen, Daten und Sonderzeichen exakt so wieder, wie sie erscheinen
+- Ist der Text mehrspaltig, lies von links nach rechts und von oben nach unten
+- Gibt es Tabellen, bewahre die Tabellenstruktur mit passender Formatierung
+- Gib die Umlaute ä, ö, ü, Ä, Ö, Ü und das ß korrekt wieder
+- Bewahre die deutsche Zeichensetzung, insbesondere die Anführungszeichen „…“ und »…«
+- Setze am Zeilenende getrennte Wörter wieder zusammen (z. B. „Kanin-“ + „chen“ → „Kaninchen“)
+- Ist der Text in Fraktur gesetzt, gib ihn in lateinischer Schrift wieder; das lange ſ wird zu s
+- Lass gedruckte Seitenzahlen, laufende Kopf- und Fußzeilen und Wasserzeichen weg: Sie gehören nicht zum Inhalt
+- Kennzeichne Kapiteltitel als Markdown-Überschriften mit # und Abschnittstitel mit ##
+- Füge keine Interpretation oder Kommentare hinzu, gib nur den tatsächlichen Text wieder
+
+Gib den extrahierten Text in einem sauberen, gut lesbaren Format wieder, das die logische Struktur des Dokuments bewahrt.
