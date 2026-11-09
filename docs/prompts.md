@@ -81,8 +81,8 @@ instruction not to re-translate it) and the source text block, followed by an
 language.
 
 The context block is what makes the sliding window work: the model sees how
-the previous page was translated and continues with the same names, terms and
-voice.
+the previous page was translated and continues the text from there instead of
+starting cold on every page.
 
 ## Tips
 

@@ -30,11 +30,11 @@ review and fix.
    noisy scans, complex scripts, diacritics, less common languages.
    Per-language prompts handle details such as reading direction or letters
    models tend to confuse.
-2. **`basira translate`** translates one page at a time and sends the
-   finished translation of the previous page along as context. This
-   one-page **sliding window** keeps names, terms and voice consistent
-   across the book. A failed page clears the window, so one bad page never
-   affects the next.
+2. **`basira translate`** translates one page at a time with a one-page
+   **sliding window**: the finished translation of the previous page goes
+   along as context, so each page is translated as a continuation of the
+   text, not as an isolated fragment. A failed page clears the window, so
+   one bad page never affects the next.
 3. **`basira typst`** typesets the result as an A5 book: title page,
    optional translator's preface, table of contents, running heads,
    footnotes, and an even page count for printing. Everything comes from
@@ -156,10 +156,10 @@ Exit codes: `0` done, `3` done but some pages failed, `1` error or stopped,
   headings and lists instead of raw lines.
 - **…use a PDF-to-markdown tool such as Marker or olmOCR?** They are good
   at extraction, but they stop at markdown. Basira Vision is about the
-  whole edition: translation that stays consistent across the book, and
-  typesetting.
+  whole edition: translation in which every page continues the one
+  before, and typesetting.
 - **…upload the PDF to a chatbot?** That works for a few pages. For a whole
-  book you lose page structure, consistent terminology between sessions,
+  book you lose page structure, the thread of the text between sessions,
   the ability to resume, and a reviewable file between the steps.
 
 ## Local models and gateways
