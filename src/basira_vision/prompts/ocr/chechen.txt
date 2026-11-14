@@ -4,7 +4,7 @@ Instructions:
 - Maintain the original formatting and structure as much as possible.
 - Include all text elements: headings, paragraphs, lists, tables, and captions.
 - Join the printed lines of a paragraph into one line; separate paragraphs with one blank line. Do not indent paragraphs.
-- A word hyphenated at the end of a printed line is one word: write it without the hyphen and the break (сан-/на -> санна). Keep real hyphens of compound words (Къилба-ХӀирийн, ХӀинж-хӀорд).
+- A word hyphenated at the end of a printed line is one word: write it without the hyphen and the break (сан-/на -> санна). Keep real hyphens of compound words (Къилба-Хӏирийн, Хӏинж-хӏорд).
 - A hyphenated word at the very end of the page stays as printed (with its trailing hyphen): it continues on the next page.
 - Text set in letter-spacing (s p a c e d  o u t) is emphasis: write the word normally, without the spaces, in **bold**.
 - Include any numbers, dates, or special characters exactly as they appear.
@@ -17,9 +17,10 @@ Instructions:
 CHECHEN-SPECIFIC RULES:
 - Chechen is written in the CYRILLIC script (Russian-based alphabet), NOT in Arabic script. Never substitute Arabic or Latin letters for Chechen Cyrillic letters.
 - The palochka letter – uppercase Ӏ (U+04C0, CYRILLIC CAPITAL LETTER PALOCHKA) and lowercase ӏ (U+04CF, CYRILLIC SMALL LETTER PALOCHKA) – looks like a plain vertical bar and is the most commonly misrecognized character in Chechen text.
-- Vision models typically replace the palochka with Latin I, i, l, or J, the Cyrillic І or і (U+0406, U+0456, the Ukrainian and Belarusian letter), the digit 1, an apostrophe ', or a pipe |. This happens most often at the start of a word (Ӏаш, not Іаш).
+- Vision models typically replace the palochka with Latin I, i, l, or J, the Cyrillic І or і (U+0406, U+0456, the Ukrainian and Belarusian letter), the digit 1, an apostrophe ', or a pipe |. This happens most often at the start of a word (ӏаш, not іаш).
 - These substitutions are errors and must never appear in the output.
-- REQUIRED: always transcribe the palochka with its dedicated Unicode codepoint (U+04C0 for uppercase, U+04CF for lowercase), never with a lookalike character, and preserve its case exactly as written.
+- REQUIRED: always transcribe the palochka with its dedicated Unicode codepoint, never with a lookalike character.
+- Print does not show the palochka's case, so choose it by the spelling rules: write Ӏ (U+04C0) where a capital letter belongs – at the start of a sentence, at the start of a proper name, and in words set in capitals. Write ӏ (U+04CF) everywhere else, including inside digraphs and in a capitalized word that begins with a digraph (Гӏалгӏай, Кӏира).
 - The palochka appears standalone (e.g. йоӏ, Ӏа).
 - It also appears inside digraphs marking ejective consonants (кӏ, пӏ, тӏ, цӏ, чӏ) and in хӏ.
 - Do not confuse хӏ (ha + palochka) with other х-combinations such as хь or хар.

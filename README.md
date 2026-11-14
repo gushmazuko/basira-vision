@@ -124,8 +124,8 @@ your edits) or `--force-restart` (delete it and start over).
   a row instead of failing the rest of the book.
 - At the end: a summary with the exact command to retry, continue or run the
   next step.
-- **Ctrl-C** once finishes the page in progress (its request is already paid
-  for) and pauses; press it again to stop at once. Either way nothing is
+- **Ctrl-C** once finishes the page in progress (its request is already
+  sent) and pauses; press it again to stop at once. Either way nothing is
   lost: continue with `--resume`.
 
 A page that fails is recorded with its reason in the marker and no text,
@@ -162,6 +162,30 @@ Exit codes: `0` done, `3` done but some pages failed, `1` error or stopped,
   book you lose page structure, the thread of the text between sessions,
   the ability to resume, and a reviewable file between the steps.
 
+## Accuracy
+
+A hard case for OCR: scanned pages of a printed book in **Chechen**, a
+low-resource language written in Cyrillic with the palochka (Ӏ), a letter
+that looks like a plain vertical bar and that most engines misread. The
+pages mix prose, a dictionary page, a captioned illustration and a table.
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/gushmazuko/basira-vision/main/assets/accuracy.svg" alt="Wrong words per 1,000 on 8 scanned pages of a printed Chechen book: EasyOCR 182.9, PaddleOCR 134.2, basira with gemini-4-hydrogen page only 3.9, basira with --strips 3 2.9. Lower is better." width="100%">
+</p>
+
+| Setup | Wrong words per 1,000 |
+|---|---:|
+| EasyOCR 1.7.2 (`che`) | 182.9 |
+| PaddleOCR 3.7.0 (`che`) | 134.2 |
+| basira, `gemini-4-hydrogen`, page only | 3.9 |
+| basira, `gemini-4-hydrogen`, `--strips 3` | 2.9 |
+
+Scored word by word against a transcription checked by a native speaker;
+formatting is ignored, spelling counts. 2,444 words, 5 runs per basira
+setup (the model does not give the same answer twice; the table shows the
+mean). One book and one language: your scans will give other numbers.
+Method, ranges and limits: [docs/benchmark.md](docs/benchmark.md).
+
 ## Local models and gateways
 
 The client speaks the Gemini API protocol (`google-genai`). Set
@@ -192,40 +216,43 @@ them also take `--log-format auto|live|plain|json` and `-v`/`--verbose`.
 |--------|---------|
 | `--source-language` | OCR prompt: `english` (default), `arabic`, `chechen`, `french`, `german`, `russian`, or your own |
 | `--page-range` | `5` or `1-10`; pages keep their real numbers |
-| `--dpi` | render resolution, 72–600 (default 300; try 600 for poor scans) |
-| `--strips` | also send N overlapping full-resolution horizontal strips of each page in the same request, 0–8 (default 0) |
-| `--thinking-level` | reasoning effort: `low`, `medium`, `high` or `xhigh` (default: not sent, the model decides) |
-| `--media-resolution` | token budget per image: `low`, `medium`, `high` or `ultra_high` (default: the model's) |
+| `--dpi` | render resolution, 72–600 (default 300; a higher value gives the model no more detail, use `--strips` instead) |
+| `--strips` | also send N overlapping full-resolution horizontal strips of each page in the same request, 0–8 (default 0; 3 recommended) |
+| `--thinking-level` | reasoning effort: `low`, `medium`, `high` or `xhigh` (default: not sent, the model decides; leave it unset) |
+| `--media-resolution` | token budget per image: `low`, `medium`, `high` or `ultra_high` (default: the model's; leave it unset) |
 | `--model`, `-m` | model name, overrides `GEMINI_MODEL` |
 | `--custom-prompt` | prompt text, or a path to a prompt file |
 | `--prompts-dir` | your own prompt directory (see [docs/prompts.md](docs/prompts.md)) |
 | `--output-dir` | workspace directory (default `./workspace`) |
+| `--image-format` | format of the rendered page images: `PNG` (default), `JPEG` or `TIFF` |
 | `--no-images` | do not keep the rendered page images |
 | `--resume` / `--force-restart` | continue (keeps finished pages, retries failed ones) / delete the output and start over |
 
 #### Getting the most accurate text
 
-For dense print, add strips:
-
 ```bash
 basira ocr book.pdf --source-language chechen --strips 3
 ```
 
-- **`--strips 3`**. The model spends a fixed token budget on every image,
-  whatever its size: a page at 600 dpi gets no more detail than at 300.
-  Strips add budget: the model sees the whole page for layout plus each
-  third of it at full resolution, so small letters and signs are read
-  better. Requests with strips take longer and use a 300 s timeout. On a
-  scanned Chechen book (Gemini 4 Hydrogen, 4 hard pages, 1012 words, 3 runs
-  each, thinking level `low`), strips cut the wrong words from 2.33 to 0.33
-  per run.
-- **`--thinking-level`**. Without the option the model uses its own default
-  level, and for OCR that was the most accurate: on the same book (8 pages,
-  2447 words, with strips, 20 runs each on the same day), `low` made more
-  errors than the default (12.7 against 5.4 wrong words per run), including
-  pages where every й or palochka came out as a different Unicode character.
-  `low` is about twice as fast. `xhigh` thought several times longer per
-  page without being more accurate. Leave it unset when accuracy matters.
+Three things matter, in this order:
+
+1. **The model.** A stronger vision model makes the biggest difference,
+   more than any option. The default is `gemini-4-hydrogen`; choose
+   another with `--model` or `GEMINI_MODEL`.
+2. **`--strips 3`.** The model spends a fixed token budget on every image,
+   whatever its size: a page at 600 dpi gets no more detail than at 300.
+   Strips add budget: the model sees the whole page for layout plus each
+   third of it at full resolution, so small letters and signs are read
+   better. More than 3 strips did not help in our tests.
+3. **Leave `--thinking-level` unset.** The model's default level was the
+   most accurate for OCR. `low` made more than twice as many wrong words
+   and sometimes wrote a whole page with lookalike Unicode characters;
+   `xhigh` was not more accurate than the default.
+
+`--media-resolution ultra_high` and a higher `--dpi` did not make the text
+more accurate in our tests, so leave them at their defaults. Requests with
+strips or `ultra_high` use a 300 s timeout instead of 120 s; a gateway in
+between has to allow that. The measurements are in [Accuracy](#accuracy).
 
 `--thinking-level` and `--media-resolution` need a model that supports them
 (Gemini 3 and later); a gateway has to pass them through.
@@ -257,8 +284,9 @@ command. A ready example is [examples/translator_preface.md](examples/translator
 | `--translator-preface` | markdown file inserted after the title page ([example](examples/translator_preface.md)) |
 | `--lang` | document language code (default: from the frontmatter) |
 | `--header` | running header text (default: the title) |
-| `--toc-title`, `--no-toc` | table of contents heading, or no table of contents |
+| `--toc-title`, `--toc` / `--no-toc` | table of contents heading, and whether to include it |
 | `--template` | your own copy of the template (see Customizing) |
+| `-o`, `--output` | output PDF (default: next to the markdown) |
 
 Page size, margins, fonts and spacing are set in the template, not on the
 command line.
@@ -270,7 +298,7 @@ Environment variables, or a `.env` file in the current directory:
 | Variable | Purpose |
 |----------|---------|
 | `GEMINI_API_KEY` | API key (required; `GOOGLE_API_KEY` also works) |
-| `GEMINI_MODEL` | model name, default `gemini-3.8-flash` |
+| `GEMINI_MODEL` | model name, default `gemini-4-hydrogen` |
 | `GEMINI_BASE_URL` | Gemini-protocol gateway, see above |
 | `BASIRA_OUTPUT_DIR` | workspace directory, default `./workspace` |
 | `BASIRA_PROMPTS_DIR` | your own prompt directory |
@@ -318,8 +346,9 @@ basira ocr book.pdf --prompts-dir prompts
 - **Text only.** Illustrations are not carried over, and complex tables or
   multi-column layouts may need manual cleanup in the markdown.
 - **Models make mistakes.** They can skip or invent a line, especially in
-  footnotes and damaged areas. Reviewing the markdown between steps is part
-  of the workflow, not an optional extra.
+  footnotes and damaged areas, and they tend to "correct" rare words, old
+  spellings and printing errors to a more common form. Reviewing the
+  markdown between steps is part of the workflow, not an optional extra.
 
 ## Rights and privacy
 
@@ -335,4 +364,5 @@ endpoint.
 
 - [ARCHITECTURE.md](ARCHITECTURE.md): modules, page files, resume and the sliding window
 - [docs/prompts.md](docs/prompts.md): prompt templates and adding languages
+- [docs/benchmark.md](docs/benchmark.md): how the accuracy numbers were measured
 - [CHANGELOG.md](CHANGELOG.md)

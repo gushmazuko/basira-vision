@@ -204,7 +204,7 @@ def main():
     GEMINI_API_KEY (required), GEMINI_MODEL, GEMINI_BASE_URL,
     BASIRA_OUTPUT_DIR, BASIRA_PROMPTS_DIR.
 
-    Exit codes: 0 done, 3 done with failed pages, 1 error, 2 bad usage,
+    Exit codes: 0 done, 3 done with failed pages, 1 error or stopped, 2 invalid usage,
     130 paused with Ctrl-C.
     """
 
@@ -218,7 +218,7 @@ def main():
               help="OCR prompt template, named after the language of the scan")
 @click.option("--page-range", help="Pages to process, e.g. 5 or 1-10 (default: all)")
 @click.option("--dpi", type=click.IntRange(72, 600), default=300, show_default=True,
-              help="Render resolution; use 600 for poor scans")
+              help="Render resolution; for small print use --strips, not a higher dpi")
 @click.option("--strips", type=click.IntRange(0, 8), default=0, show_default=True,
               help="Also send N overlapping full-resolution strips of each page in the same request")
 @click.option("--media-resolution", type=click.Choice(MEDIA_RESOLUTIONS, case_sensitive=False),

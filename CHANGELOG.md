@@ -6,6 +6,17 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-11-14
+
+- The default model is now `gemini-4-hydrogen` (was `gemini-3.8-flash`).
+- Chechen OCR prompt: the palochka's case follows the spelling rules, since
+  print does not show it: Ӏ where a capital belongs (start of a sentence or a
+  proper name, words in capitals), ӏ everywhere else, including digraphs.
+  0.2.0 asked the model to keep the printed case, which made it mix Ӏ and ӏ.
+- `--dpi` help no longer suggests 600 dpi; use `--strips` for small print.
+- README: accuracy measurements on a Chechen book and advice on the OCR
+  options, without speed or cost claims; full method in docs/benchmark.md.
+
 ## [0.2.0] - 2026-11-14
 
 - `basira ocr --strips N`: sends the page together with N overlapping
@@ -48,5 +59,7 @@ First public release.
 - Custom prompt directories (`--prompts-dir`, `BASIRA_PROMPTS_DIR`).
 - Gemini-protocol gateways via `GEMINI_BASE_URL`.
 
-[Unreleased]: https://github.com/gushmazuko/basira-vision/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/gushmazuko/basira-vision/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/gushmazuko/basira-vision/compare/v0.2.0...v0.2.1
+[0.2.0]: https://github.com/gushmazuko/basira-vision/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/gushmazuko/basira-vision/releases/tag/v0.1.0

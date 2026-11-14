@@ -27,7 +27,8 @@ src/basira_vision/
 │   ├── base.py                VisionProvider interface: extract_text, generate_text, check_connection
 │   └── gemini.py              Gemini-protocol client: Google API or a compatible gateway,
 │                              retries on 408/429/5xx and transport errors, honors Retry-After,
-│                              announces every retry through on_retry
+│                              announces every retry through on_retry; for OCR also page strips,
+│                              media resolution and thinking level, 300 s timeout for heavy requests
 ├── processing/
 │   ├── pdf_converter.py       page count, --page-range parsing, page rendering (PyMuPDF)
 │   ├── prompt_loader.py       prompt lookup: user --prompts-dir first, then built-ins

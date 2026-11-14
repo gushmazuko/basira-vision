@@ -7,7 +7,7 @@ per language:
 src/basira_vision/prompts/
 ├── ocr/          # file name = language of the scan      (--source-language)
 │   ├── arabic.txt     right-to-left reading order, columns, diacritics, numerals
-│   ├── chechen.txt    Cyrillic palochka (Ӏ/ӏ) and digraphs
+│   ├── chechen.txt    palochka (Ӏ/ӏ) and digraphs, verbatim spelling, joined lines
 │   ├── english.txt    baseline
 │   ├── french.txt     accents, French punctuation
 │   ├── german.txt     umlauts and ß, „…“ quotes, words hyphenated at line ends, Fraktur

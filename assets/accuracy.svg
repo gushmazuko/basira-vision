@@ -1,0 +1,61 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 820 236" font-family="-apple-system, 'Segoe UI', Helvetica, Arial, sans-serif" role="img" aria-labelledby="t d">
+  <title id="t">Wrong words per 1,000 on scanned Chechen book pages</title>
+  <desc id="d">EasyOCR 182.9, PaddleOCR 134.2, basira with Gemini 4 Hydrogen page only 3.9, basira with Gemini 4 Hydrogen and three strips 2.9 wrong words per 1,000. Lower is better.</desc>
+  <style>
+    .title  { fill: #1f2328; font-size: 15px; font-weight: 600; }
+    .note   { fill: #59636e; font-size: 12px; }
+    .label  { fill: #1f2328; font-size: 13.5px; text-anchor: end; }
+    .sub    { fill: #59636e; font-size: 11.5px; text-anchor: end; }
+    .value  { fill: #1f2328; font-size: 13.5px; font-weight: 600; }
+    .axis   { stroke: #d0d7de; stroke-width: 1; }
+    .tick   { fill: #59636e; font-size: 11px; text-anchor: middle; }
+    .grid   { stroke: #d0d7de; stroke-width: 1; stroke-dasharray: 2 4; }
+    .other  { fill: #8b949e; }
+    .basira { fill: #2a78d6; }
+    @media (prefers-color-scheme: dark) {
+      .title, .label, .value { fill: #f0f6fc; }
+      .note, .sub, .tick     { fill: #9198a1; }
+      .axis, .grid           { stroke: #3d444d; }
+      .other  { fill: #6e7681; }
+      .basira { fill: #3987e5; }
+    }
+  </style>
+
+  <text x="250" y="24" class="title">Wrong words per 1,000</text>
+  <text x="250" y="42" class="note">8 scanned pages of a printed Chechen book, 2,444 words · lower is better</text>
+
+  <!-- grid and axis: x = 250 + value * 2.6 (0..200) -->
+  <line x1="380" y1="56" x2="380" y2="204" class="grid"/>
+  <line x1="510" y1="56" x2="510" y2="204" class="grid"/>
+  <line x1="640" y1="56" x2="640" y2="204" class="grid"/>
+  <line x1="250" y1="56" x2="250" y2="204" class="axis"/>
+  <text x="250" y="222" class="tick">0</text>
+  <text x="380" y="222" class="tick">50</text>
+  <text x="510" y="222" class="tick">100</text>
+  <text x="640" y="222" class="tick">150</text>
+  <text x="770" y="222" class="tick">200</text>
+
+  <!-- EasyOCR 182.9 -->
+  <text x="236" y="76" class="label">EasyOCR</text>
+  <text x="236" y="91" class="sub">lang che</text>
+  <path d="M250 64 h471.5 a4 4 0 0 1 4 4 v18 a4 4 0 0 1 -4 4 h-471.5 z" class="other"/>
+  <text x="733" y="82" class="value">182.9</text>
+
+  <!-- PaddleOCR 134.2 -->
+  <text x="236" y="112" class="label">PaddleOCR</text>
+  <text x="236" y="127" class="sub">lang che</text>
+  <path d="M250 100 h344.9 a4 4 0 0 1 4 4 v18 a4 4 0 0 1 -4 4 h-344.9 z" class="other"/>
+  <text x="607" y="118" class="value">134.2</text>
+
+  <!-- basira page only 3.9 -->
+  <text x="236" y="148" class="label">basira, page only</text>
+  <text x="236" y="163" class="sub">gemini-4-hydrogen</text>
+  <path d="M250 136 h6.1 a4 4 0 0 1 4 4 v18 a4 4 0 0 1 -4 4 h-6.1 z" class="basira"/>
+  <text x="270" y="154" class="value">3.9</text>
+
+  <!-- basira strips 3 2.9 -->
+  <text x="236" y="184" class="label">basira, --strips 3</text>
+  <text x="236" y="199" class="sub">gemini-4-hydrogen</text>
+  <path d="M250 172 h3.5 a4 4 0 0 1 4 4 v18 a4 4 0 0 1 -4 4 h-3.5 z" class="basira"/>
+  <text x="267" y="190" class="value">2.9</text>
+</svg>
