@@ -237,8 +237,8 @@ def main():
 @click.option("--resume", is_flag=True, help="Keep finished pages and process only missing or failed ones")
 @click.option("--force-restart", is_flag=True, help="Delete the existing output and start over")
 @_command("ocr")
-def ocr(reporter, pdf_file, source_language, page_range, dpi, strips, media_resolution, thinking_level, model, custom_prompt, prompts_dir,
-        output_dir, image_format, no_images, resume, force_restart):
+def ocr(reporter, pdf_file, source_language, page_range, dpi, strips, media_resolution, thinking_level, model,
+        custom_prompt, prompts_dir, output_dir, image_format, no_images, resume, force_restart):
     """Read every page of a scanned PDF with a vision model into markdown.
 
     Writes <workspace>/<name>/<name>.md with one <!-- Page N --> block per page.

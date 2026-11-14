@@ -36,13 +36,14 @@ _CHECK_TIMEOUT_S = 15  # connection check before a run
 _RETRYABLE_API_CODES = {408, 429}  # plus 5xx, computed per error
 
 # Appended to the OCR prompt when the page is sent together with its strips.
-STRIPS_NOTE = """
-
-IMAGES:
-- The first image is the whole page. Use it for the layout and structure: headings, paragraphs, reading order.
-- The next {count} images are horizontal strips of the same page at full resolution, from top to bottom. Neighboring strips overlap slightly.
-- Read every word letter by letter from the strips, where small letters and signs are clearest.
-- Transcribe the page once: a line that appears in two overlapping strips is written only once."""
+STRIPS_NOTE = (
+    "\n\nIMAGES:\n"
+    "- The first image is the whole page. Use it for the layout and structure: headings, paragraphs, reading order.\n"
+    "- The next {count} images are horizontal strips of the same page at full resolution, from top to bottom. "
+    "Neighboring strips overlap slightly.\n"
+    "- Read every word letter by letter from the strips, where small letters and signs are clearest.\n"
+    "- Transcribe the page once: a line that appears in two overlapping strips is written only once."
+)
 
 
 def _image_part(image: Any, media_resolution: str) -> types.Part:

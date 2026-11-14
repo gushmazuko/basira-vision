@@ -159,5 +159,5 @@ def test_split_strips_cover_page_with_overlap():
     assert [s.size for s in strips] == [(100, 110), (100, 120), (100, 110)]
     # first starts at the top, last ends at the bottom, neighbors overlap
     boxes = [(0, 110), (90, 210), (190, 300)]
-    for strip, (top, bottom) in zip(strips, boxes):
+    for strip, (top, bottom) in zip(strips, boxes, strict=True):
         assert strip.height == bottom - top
