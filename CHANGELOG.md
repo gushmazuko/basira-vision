@@ -6,6 +6,21 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-14
+
+- `basira ocr --strips N`: sends the page together with N overlapping
+  full-resolution strips of it in one request, for small letters and signs.
+- `basira ocr --thinking-level low|medium|high|xhigh` sets the model's
+  reasoning effort; without it the model uses its own default.
+- `basira ocr --media-resolution low|medium|high|ultra_high` sets the token
+  budget per image.
+- OCR requests with strips or `ultra_high` use a 300 s timeout instead of 120 s.
+- With `-v`, the token usage of every page is logged (prompt, thoughts, output).
+- Chechen OCR prompt: verbatim transcription (no spelling corrections or
+  modernization, careful ь/ъ and doubled letters), Cyrillic І/і listed
+  among the palochka lookalikes, paragraphs joined and line-end hyphenation
+  removed. The palochka keeps its printed case, as before.
+
 ## [0.1.0] - 2026-11-09
 
 First public release.

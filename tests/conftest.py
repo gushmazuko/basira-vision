@@ -31,7 +31,8 @@ class FakeProvider:
             raise self.connection_error
         return self.connection_warning
 
-    def extract_text(self, image_path: Path, prompt: str) -> str:
+    def extract_text(self, image_path: Path, prompt: str, strips: int = 0, media_resolution=None,
+                     thinking_level=None) -> str:
         number = int(re.search(r"(\d+)", image_path.stem).group(1))
         self.ocr_calls.append(number)
         if number in self.on_page:

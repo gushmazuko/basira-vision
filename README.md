@@ -193,12 +193,42 @@ them also take `--log-format auto|live|plain|json` and `-v`/`--verbose`.
 | `--source-language` | OCR prompt: `english` (default), `arabic`, `chechen`, `french`, `german`, `russian`, or your own |
 | `--page-range` | `5` or `1-10`; pages keep their real numbers |
 | `--dpi` | render resolution, 72–600 (default 300; try 600 for poor scans) |
+| `--strips` | also send N overlapping full-resolution horizontal strips of each page in the same request, 0–8 (default 0) |
+| `--thinking-level` | reasoning effort: `low`, `medium`, `high` or `xhigh` (default: not sent, the model decides) |
+| `--media-resolution` | token budget per image: `low`, `medium`, `high` or `ultra_high` (default: the model's) |
 | `--model`, `-m` | model name, overrides `GEMINI_MODEL` |
 | `--custom-prompt` | prompt text, or a path to a prompt file |
 | `--prompts-dir` | your own prompt directory (see [docs/prompts.md](docs/prompts.md)) |
 | `--output-dir` | workspace directory (default `./workspace`) |
 | `--no-images` | do not keep the rendered page images |
 | `--resume` / `--force-restart` | continue (keeps finished pages, retries failed ones) / delete the output and start over |
+
+#### Getting the most accurate text
+
+For dense print, add strips:
+
+```bash
+basira ocr book.pdf --source-language chechen --strips 3
+```
+
+- **`--strips 3`**. The model spends a fixed token budget on every image,
+  whatever its size: a page at 600 dpi gets no more detail than at 300.
+  Strips add budget: the model sees the whole page for layout plus each
+  third of it at full resolution, so small letters and signs are read
+  better. Requests with strips take longer and use a 300 s timeout. On a
+  scanned Chechen book (Gemini 4 Hydrogen, 4 hard pages, 1012 words, 3 runs
+  each, thinking level `low`), strips cut the wrong words from 2.33 to 0.33
+  per run.
+- **`--thinking-level`**. Without the option the model uses its own default
+  level, and for OCR that was the most accurate: on the same book (8 pages,
+  2447 words, with strips, 20 runs each on the same day), `low` made more
+  errors than the default (12.7 against 5.4 wrong words per run), including
+  pages where every й or palochka came out as a different Unicode character.
+  `low` is about twice as fast. `xhigh` thought several times longer per
+  page without being more accurate. Leave it unset when accuracy matters.
+
+`--thinking-level` and `--media-resolution` need a model that supports them
+(Gemini 3 and later); a gateway has to pass them through.
 
 ### `basira translate MARKDOWN_FILE`
 

@@ -25,6 +25,7 @@ from .processing.translation import (
     render_prompt,
 )
 from .providers import VisionProvider, create_provider
+from .providers.gemini import MEDIA_RESOLUTIONS, THINKING_LEVELS
 from .settings import Settings
 from .ui import LOG_FORMATS, Hint, Reporter, display_path, print_result_path
 from .ui.events import RunFinished, RunStarted, StepDone, StepStarted
@@ -218,6 +219,12 @@ def main():
 @click.option("--page-range", help="Pages to process, e.g. 5 or 1-10 (default: all)")
 @click.option("--dpi", type=click.IntRange(72, 600), default=300, show_default=True,
               help="Render resolution; use 600 for poor scans")
+@click.option("--strips", type=click.IntRange(0, 8), default=0, show_default=True,
+              help="Also send N overlapping full-resolution strips of each page in the same request")
+@click.option("--media-resolution", type=click.Choice(MEDIA_RESOLUTIONS, case_sensitive=False),
+              help="Token budget per image (model default if not set)")
+@click.option("--thinking-level", type=click.Choice(THINKING_LEVELS, case_sensitive=False),
+              help="Reasoning effort (model default if not set)")
 @click.option("--model", "-m", help="Model name (overrides GEMINI_MODEL)")
 @click.option("--custom-prompt", help="OCR prompt text, or a path to a prompt file")
 @click.option("--prompts-dir", type=click.Path(file_okay=False, path_type=Path),
@@ -230,7 +237,7 @@ def main():
 @click.option("--resume", is_flag=True, help="Keep finished pages and process only missing or failed ones")
 @click.option("--force-restart", is_flag=True, help="Delete the existing output and start over")
 @_command("ocr")
-def ocr(reporter, pdf_file, source_language, page_range, dpi, model, custom_prompt, prompts_dir,
+def ocr(reporter, pdf_file, source_language, page_range, dpi, strips, media_resolution, thinking_level, model, custom_prompt, prompts_dir,
         output_dir, image_format, no_images, resume, force_restart):
     """Read every page of a scanned PDF with a vision model into markdown.
 
@@ -263,6 +270,9 @@ def ocr(reporter, pdf_file, source_language, page_range, dpi, model, custom_prom
         *_option("--output-dir", output_dir),
         *_option("--model", model),
         *_option("--dpi", dpi, 300),
+        *_option("--strips", strips, 0),
+        *_option("--media-resolution", media_resolution),
+        *_option("--thinking-level", thinking_level),
         *_option("--image-format", image_format.upper(), "PNG"),
         *(["--no-images"] if no_images else []),
     ]
@@ -294,6 +304,12 @@ def ocr(reporter, pdf_file, source_language, page_range, dpi, model, custom_prom
     if completed:
         details.append(f"{len(completed)} done earlier")
     details += [f"prompt {prompt_label}", _model_details(settings, model, provider), f"{dpi} dpi"]
+    if strips:
+        details.append(f"page + {strips} strips")
+    if media_resolution:
+        details.append(f"media resolution {media_resolution}")
+    if thinking_level:
+        details.append(f"thinking {thinking_level}")
     reporter.emit(RunStarted("ocr", display_path(pdf_file), display_path(output_path), " · ".join(details),
                              pages=list(range(1, total + 1)), todo=todo, done_before=sorted(completed)))
     if replacing:
@@ -306,7 +322,9 @@ def ocr(reporter, pdf_file, source_language, page_range, dpi, model, custom_prom
         target_dir = images_dir or Path(tmp)
 
         def read_page(number: int):
-            return lambda: provider.extract_text(renderer.render(number, target_dir), prompt)
+            return lambda: provider.extract_text(renderer.render(number, target_dir), prompt, strips,
+                                                 media_resolution and media_resolution.lower(),
+                                                 thinking_level and thinking_level.lower())
 
         tasks = [PageTask(n, read_page(n), "reading") for n in todo]
         result = run_pages(tasks, page_file, provider, reporter, set(range(1, total + 1)))

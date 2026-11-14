@@ -147,3 +147,17 @@ def test_connection_check(monkeypatch):
         provider_with([httpx.ConnectError("[Errno 61] Connection refused")], monkeypatch).check_connection()
     with pytest.raises(AuthenticationError):
         provider_with([api_error(403, "PERMISSION_DENIED")], monkeypatch).check_connection()
+
+
+def test_split_strips_cover_page_with_overlap():
+    from PIL import Image
+
+    from basira_vision.providers.base import VisionProvider
+
+    page = Image.new("RGB", (100, 300), "white")
+    strips = VisionProvider.split_strips(page, 3)
+    assert [s.size for s in strips] == [(100, 110), (100, 120), (100, 110)]
+    # first starts at the top, last ends at the bottom, neighbors overlap
+    boxes = [(0, 110), (90, 210), (190, 300)]
+    for strip, (top, bottom) in zip(strips, boxes):
+        assert strip.height == bottom - top

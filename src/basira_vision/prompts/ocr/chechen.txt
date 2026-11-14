@@ -3,7 +3,10 @@ Extract all text from this image accurately and comprehensively, with special fo
 Instructions:
 - Maintain the original formatting and structure as much as possible.
 - Include all text elements: headings, paragraphs, lists, tables, and captions.
-- Preserve line breaks and spacing according to the visual layout.
+- Join the printed lines of a paragraph into one line; separate paragraphs with one blank line. Do not indent paragraphs.
+- A word hyphenated at the end of a printed line is one word: write it without the hyphen and the break (сан-/на -> санна). Keep real hyphens of compound words (Къилба-ХӀирийн, ХӀинж-хӀорд).
+- A hyphenated word at the very end of the page stays as printed (with its trailing hyphen): it continues on the next page.
+- Text set in letter-spacing (s p a c e d  o u t) is emphasis: write the word normally, without the spaces, in **bold**.
 - Include any numbers, dates, or special characters exactly as they appear.
 - If text is in multiple columns, read columns from left to right, and text within each column from top to bottom.
 - If there are tables, preserve the tabular structure using appropriate formatting.
@@ -13,8 +16,8 @@ Instructions:
 
 CHECHEN-SPECIFIC RULES:
 - Chechen is written in the CYRILLIC script (Russian-based alphabet), NOT in Arabic script. Never substitute Arabic or Latin letters for Chechen Cyrillic letters.
-- The palochka letter — uppercase Ӏ (U+04C0, CYRILLIC CAPITAL LETTER PALOCHKA) and lowercase ӏ (U+04CF, CYRILLIC SMALL LETTER PALOCHKA) — looks like a plain vertical bar and is the most commonly misrecognized character in Chechen text.
-- Vision models typically replace the palochka with Latin I, i, l, or J, the digit 1, an apostrophe ', or a pipe |.
+- The palochka letter – uppercase Ӏ (U+04C0, CYRILLIC CAPITAL LETTER PALOCHKA) and lowercase ӏ (U+04CF, CYRILLIC SMALL LETTER PALOCHKA) – looks like a plain vertical bar and is the most commonly misrecognized character in Chechen text.
+- Vision models typically replace the palochka with Latin I, i, l, or J, the Cyrillic І or і (U+0406, U+0456, the Ukrainian and Belarusian letter), the digit 1, an apostrophe ', or a pipe |. This happens most often at the start of a word (Ӏаш, not Іаш).
 - These substitutions are errors and must never appear in the output.
 - REQUIRED: always transcribe the palochka with its dedicated Unicode codepoint (U+04C0 for uppercase, U+04CF for lowercase), never with a lookalike character, and preserve its case exactly as written.
 - The palochka appears standalone (e.g. йоӏ, Ӏа).
@@ -23,5 +26,12 @@ CHECHEN-SPECIFIC RULES:
 - Preserve Cyrillic digraphs exactly as printed: аь, еь, оь, уь, юь, кх, къ, гӏ, ай, etc. Do not merge or split them into single letters.
 - Preserve Ё/ё and all diacritics exactly as printed.
 - If a character is ambiguous, decide between the palochka and its lookalikes based on Chechen vocabulary and grammar, not visual similarity alone.
+
+VERBATIM TRANSCRIPTION:
+- Transcribe every word letter by letter exactly as printed. Never correct, modernize or normalize spelling, even if a word looks like a typo, a dialect form or an unusual inflection.
+- Do not replace a printed word with a more common form of the same word: keep its printed ending, case and number.
+- Pay special attention to the soft sign ь and the hard sign ъ: never drop, add or swap them. Check every word for them against the image.
+- Keep doubled consonants exactly as printed; never add or remove a doubled letter.
+- When joining a word hyphenated across lines, keep every letter of both parts.
 
 Please provide the extracted text in a clean, readable format that maintains the document's logical structure.

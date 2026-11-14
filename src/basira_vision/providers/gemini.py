@@ -1,5 +1,6 @@
 """Gemini-protocol provider (Google API or any compatible gateway)."""
 
+import io
 import math
 import time
 from datetime import datetime, timezone
@@ -26,10 +27,32 @@ logger = get_logger("providers.gemini")
 
 # Transport-level knobs (no generation config is ever set on requests).
 _REQUEST_TIMEOUT_S = 120
+_HEAVY_REQUEST_TIMEOUT_S = 300  # OCR with strips or a raised media resolution
+MEDIA_RESOLUTIONS = ("low", "medium", "high", "ultra_high")
+THINKING_LEVELS = ("low", "medium", "high", "xhigh")
 _MAX_ATTEMPTS = 3  # total attempts per request, retries owned here
 _MAX_RETRY_DELAY_S = 60.0
 _CHECK_TIMEOUT_S = 15  # connection check before a run
 _RETRYABLE_API_CODES = {408, 429}  # plus 5xx, computed per error
+
+# Appended to the OCR prompt when the page is sent together with its strips.
+STRIPS_NOTE = """
+
+IMAGES:
+- The first image is the whole page. Use it for the layout and structure: headings, paragraphs, reading order.
+- The next {count} images are horizontal strips of the same page at full resolution, from top to bottom. Neighboring strips overlap slightly.
+- Read every word letter by letter from the strips, where small letters and signs are clearest.
+- Transcribe the page once: a line that appears in two overlapping strips is written only once."""
+
+
+def _image_part(image: Any, media_resolution: str) -> types.Part:
+    """An inline PNG part with its own media resolution (token budget)."""
+    buffer = io.BytesIO()
+    image.save(buffer, format="PNG")
+    return types.Part(
+        inline_data=types.Blob(data=buffer.getvalue(), mime_type="image/png"),
+        media_resolution=types.PartMediaResolution(level=f"MEDIA_RESOLUTION_{media_resolution.upper()}"),
+    )
 
 
 def _is_retryable_code(code: Any) -> bool:
@@ -143,7 +166,8 @@ class GeminiProvider(VisionProvider):
         )
         logger.debug(f"Initialized Gemini provider: model={model_name}, endpoint={self.endpoint}")
 
-    def _generate_with_retry(self, contents: Any) -> types.GenerateContentResponse:
+    def _generate_with_retry(self, contents: Any, timeout_s: Optional[int] = None,
+                             thinking_level: Optional[str] = None) -> types.GenerateContentResponse:
         """
         Generate content, retrying only transport failures, 408/429 and 5xx.
 
@@ -158,6 +182,14 @@ class GeminiProvider(VisionProvider):
         """
         for attempt in range(1, _MAX_ATTEMPTS + 1):
             try:
+                options: Dict[str, Any] = {}
+                if timeout_s:
+                    options["http_options"] = types.HttpOptions(timeout=timeout_s * 1000)
+                if thinking_level:
+                    options["thinking_config"] = types.ThinkingConfig(thinking_level=thinking_level.upper())
+                if options:
+                    config = types.GenerateContentConfig(**options)
+                    return self.client.models.generate_content(model=self.model_name, contents=contents, config=config)
                 return self.client.models.generate_content(model=self.model_name, contents=contents)
 
             except errors.APIError as e:
@@ -185,10 +217,22 @@ class GeminiProvider(VisionProvider):
         time.sleep(delay)
 
     @handle_provider_error
-    def extract_text(self, image_path: Path, prompt: str) -> str:
-        """Read the text on a page image."""
+    def extract_text(self, image_path: Path, prompt: str, strips: int = 0,
+                     media_resolution: Optional[str] = None, thinking_level: Optional[str] = None) -> str:
+        """Read the text on a page image, optionally with full-resolution strips of it."""
         image = self.load_image(image_path)
-        response = self._generate_with_retry([prompt, image])
+        images = [image, *self.split_strips(image, strips)] if strips > 0 else [image]
+        if strips > 0:
+            prompt += STRIPS_NOTE.format(count=strips)
+        if media_resolution:
+            images = [_image_part(im, media_resolution) for im in images]
+        heavy = strips > 0 or media_resolution == "ultra_high"
+        response = self._generate_with_retry([prompt, *images], _HEAVY_REQUEST_TIMEOUT_S if heavy else None,
+                                             thinking_level)
+        usage = getattr(response, "usage_metadata", None)
+        if usage:
+            logger.debug(f"usage {image_path.name}: prompt={usage.prompt_token_count} "
+                         f"thoughts={usage.thoughts_token_count} output={usage.candidates_token_count}")
         text = getattr(response, "text", None) or ""
         if not text:
             logger.debug(f"Empty OCR response for {image_path}")

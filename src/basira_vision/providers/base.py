@@ -2,7 +2,7 @@
 
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Callable, Optional
+from typing import Callable, List, Optional
 
 from PIL import Image
 
@@ -22,8 +22,17 @@ class VisionProvider(ABC):
         self.on_retry: Optional[RetryCallback] = None
 
     @abstractmethod
-    def extract_text(self, image_path: Path, prompt: str) -> str:
-        """Return the text the model reads from a page image."""
+    def extract_text(self, image_path: Path, prompt: str, strips: int = 0,
+                     media_resolution: Optional[str] = None, thinking_level: Optional[str] = None) -> str:
+        """Return the text the model reads from a page image.
+
+        With ``strips`` > 0 the model also gets that many overlapping
+        horizontal strips of the page at full resolution, in the same request.
+        ``media_resolution`` (low, medium, high, ultra_high) sets the token
+        budget the model spends on each image; None keeps the model default.
+        ``thinking_level`` (low, medium, high, xhigh) sets the reasoning effort;
+        None keeps the model default.
+        """
 
     @abstractmethod
     def generate_text(self, prompt: str) -> str:
@@ -41,6 +50,17 @@ class VisionProvider(ABC):
                 return image.convert("RGB")
         except Exception as e:
             raise VisionProviderError(f"Failed to load image {image_path}: {e}") from e
+
+    @staticmethod
+    def split_strips(image: Image.Image, count: int, overlap: float = 0.1) -> List[Image.Image]:
+        """Cut a page into ``count`` full-width horizontal strips that overlap by ``overlap`` of a strip."""
+        width, height = image.size
+        step = height / count
+        margin = int(step * overlap)
+        return [
+            image.crop((0, max(0, int(i * step) - margin), width, min(height, int((i + 1) * step) + margin)))
+            for i in range(count)
+        ]
 
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}(name={self.name!r})"
