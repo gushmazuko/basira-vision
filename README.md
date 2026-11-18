@@ -349,6 +349,10 @@ basira ocr book.pdf --prompts-dir prompts
   footnotes and damaged areas, and they tend to "correct" rare words, old
   spellings and printing errors to a more common form. Reviewing the
   markdown between steps is part of the workflow, not an optional extra.
+- **The model can leave its reasoning in the text.** Rarely, it starts
+  thinking aloud in the middle of a page ("Wait…", "Let me…") instead of
+  keeping that out of its answer, and then writes a paragraph again. No
+  option prevents it; reviewing the markdown catches it.
 
 ## Rights and privacy
 

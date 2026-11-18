@@ -6,6 +6,13 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.2.2] - 2026-11-18
+
+- `ocr` and `translate` write `basira_version` into the frontmatter, next to
+  `ai_model`. With `--resume` it keeps the version that started the file.
+- README, Limitations: the model can rarely write its own reasoning into
+  the page text.
+
 ## [0.2.1] - 2026-11-14
 
 - The default model is now `gemini-4-hydrogen` (was `gemini-3.8-flash`).
@@ -59,7 +66,8 @@ First public release.
 - Custom prompt directories (`--prompts-dir`, `BASIRA_PROMPTS_DIR`).
 - Gemini-protocol gateways via `GEMINI_BASE_URL`.
 
-[Unreleased]: https://github.com/gushmazuko/basira-vision/compare/v0.2.1...HEAD
+[Unreleased]: https://github.com/gushmazuko/basira-vision/compare/v0.2.2...HEAD
+[0.2.2]: https://github.com/gushmazuko/basira-vision/compare/v0.2.1...v0.2.2
 [0.2.1]: https://github.com/gushmazuko/basira-vision/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/gushmazuko/basira-vision/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/gushmazuko/basira-vision/releases/tag/v0.1.0

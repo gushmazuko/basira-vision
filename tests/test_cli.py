@@ -4,6 +4,7 @@ import signal
 
 from click.testing import CliRunner
 
+from basira_vision import __version__
 from basira_vision.cli import main
 from basira_vision.utils.errors import AuthenticationError, EndpointUnreachableError
 from basira_vision.utils.pages import read_page_document
@@ -35,6 +36,7 @@ def test_ocr_writes_every_page(provider, make_pdf, tmp_path):
     assert pages == {n: (f"text of page {n}", None) for n in (1, 2, 3)}
     assert meta["processing_status"] == "Completed"
     assert meta["source_language"] == "english"
+    assert meta["basira_version"] == __version__
     assert sorted(p.name for p in (ocr_output(tmp_path).parent / "images").iterdir()) == [
         "page_001.png", "page_002.png", "page_003.png"
     ]
@@ -218,6 +220,7 @@ def test_translate_uses_the_previous_page_as_context(provider, tmp_path):
     assert pages == {1: ("tr(one)", None), 2: ("tr(two)", None), 3: ("tr(three)", None)}
     assert meta["title"] == "Book" and meta["target_language"] == "russian"
     assert meta["source_file"] == "book.md"
+    assert meta["basira_version"] == __version__
     assert "#pagebreak()" in (tmp_path / "book_russian.md").read_text()
     assert result.stdout == "book_russian.md\n"
 
