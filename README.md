@@ -106,7 +106,26 @@ basira ocr mybook.pdf --resume              # retry pages that failed
 
 Nothing you have is ever replaced silently: running a command again when
 its output already exists stops and asks for `--resume` (keep it, including
-your edits) or `--force-restart` (delete it and start over).
+your edits) or `--overwrite` (replace it on purpose). `--overwrite` deletes
+the output and starts over; with `--page-range` it replaces only those pages
+and leaves the rest of the file, and its settings, alone:
+
+```bash
+basira ocr mybook.pdf --page-range 7-9 --overwrite   # read pages 7-9 again
+```
+
+A page the model did not finish (blocked, for example RECITATION, or cut off
+at the token limit) is recorded as failed with the reason, so `--resume`
+retries it. A page the model finished with no text at all is kept as a
+blank page.
+
+`--resume` continues the same job. The settings that shape the text
+(language, model, prompt, `--strips`, `--dpi` and the other OCR options)
+are recorded in the file's frontmatter, and `--resume` reuses them, so the
+retried pages are read exactly like the others. An option typed with a
+different value stops the run instead of mixing two configurations in one
+file, and `--resume` never starts a new file. For `translate`, give the
+same `--target-language`: the output file is named after it.
 
 ## What you see while it runs
 
@@ -226,7 +245,7 @@ them also take `--log-format auto|live|plain|json` and `-v`/`--verbose`.
 | `--output-dir` | workspace directory (default `./workspace`) |
 | `--image-format` | format of the rendered page images: `PNG` (default), `JPEG` or `TIFF` |
 | `--no-images` | do not keep the rendered page images |
-| `--resume` / `--force-restart` | continue (keeps finished pages, retries failed ones) / delete the output and start over |
+| `--resume` / `--overwrite` | continue with the file's settings (keeps finished pages, retries failed ones) / replace the output: all of it, or only the pages of `--page-range` |
 
 #### Getting the most accurate text
 
@@ -266,7 +285,7 @@ between has to allow that. The measurements are in [Accuracy](#accuracy).
 | `--custom-prompt` | prompt text or file with `{text}`, optionally `{context_section}` and `{source_language}` |
 | `--prompts-dir` | your own prompt directory |
 | `-o`, `--output` | output file (default `<name>_<language>.md` next to the input) |
-| `--resume` / `--force-restart` | continue (keeps finished pages, retries failed ones) / delete the output and start over |
+| `--resume` / `--overwrite` | continue with the file's settings (keeps finished pages, retries failed ones) / delete the output and start over |
 
 ### `basira typst MARKDOWN_FILE`
 

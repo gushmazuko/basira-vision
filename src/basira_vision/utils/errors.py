@@ -15,6 +15,13 @@ class VisionProviderError(BasiraError):
     """A model provider request failed."""
 
 
+class UnfinishedReplyError(VisionProviderError):
+    """The model answered this page with a blocked, cut-off or empty reply.
+
+    A problem of that one page, not of the endpoint: the page fails and ``--resume`` retries it.
+    """
+
+
 class AuthenticationError(VisionProviderError):
     """The provider rejected the credentials."""
 

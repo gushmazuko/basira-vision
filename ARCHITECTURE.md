@@ -72,7 +72,20 @@ every page. That gives the resume behavior:
   and retries of failed pages both work;
 - pages are always written in page order, whatever order they were
   processed in;
-- only the frontmatter is edited when the status changes.
+- only the frontmatter is edited when the status changes;
+- the settings that shape the text are recorded in the frontmatter when the
+  file is created, and `cli.py` reuses them on `--resume` and on an
+  `--overwrite` of only some pages (`_resume_settings`): an option the user
+  did not type comes from the file, a typed one that differs stops the run,
+  so one file is never produced with two configurations. An `--overwrite`
+  of the whole book (no `--page-range`, or one that covers every page)
+  starts a new file and may use new settings;
+- a model reply that is not a finished one (cut off, blocked, empty with no
+  finish reason; `providers/gemini.py::_reply_text`) raises
+  `UnfinishedReplyError`, so the page is recorded as failed with the reason
+  and `--resume` retries it. It is a problem of that page, so it does not
+  count toward the consecutive failures that stop a run. A reply that
+  finished normally with no text is a blank page.
 
 A failed page keeps its reason inside the marker and has no body. Pandoc
 drops HTML comments, so a failure never reaches the typeset book. Text
@@ -111,7 +124,7 @@ are meant to be edited.
   one stops immediately.
 
 Before the loop, the CLI checks what can be checked cheaply: an existing
-output is never replaced without `--resume` or `--force-restart`, and the
+output is never replaced without `--resume` or `--overwrite`, and the
 endpoint is asked for the model with a short timeout, so a wrong URL or key
 fails before the first page.
 

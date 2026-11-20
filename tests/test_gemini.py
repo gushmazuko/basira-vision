@@ -2,7 +2,8 @@ from types import SimpleNamespace
 
 import httpx
 import pytest
-from google.genai import errors
+from google.genai import errors, types
+from PIL import Image
 
 from basira_vision.providers import gemini
 from basira_vision.providers.gemini import (
@@ -17,6 +18,7 @@ from basira_vision.utils.errors import (
     AuthenticationError,
     EndpointUnreachableError,
     RateLimitError,
+    UnfinishedReplyError,
     VisionProviderError,
 )
 
@@ -161,3 +163,95 @@ def test_split_strips_cover_page_with_overlap():
     boxes = [(0, 110), (90, 210), (190, 300)]
     for strip, (top, bottom) in zip(strips, boxes, strict=True):
         assert strip.height == bottom - top
+
+
+# ---------------------------------------------------------------------------- unfinished replies
+
+
+def reply(text="", finish="STOP"):
+    content = types.Content(parts=[types.Part(text=text)]) if text else None
+    return types.GenerateContentResponse(candidates=[types.Candidate(finish_reason=finish, content=content)])
+
+
+@pytest.fixture
+def page_image(tmp_path):
+    path = tmp_path / "page_1.png"
+    Image.new("RGB", (20, 30), "white").save(path)
+    return path
+
+
+def test_a_finished_reply_is_returned_trimmed(monkeypatch, page_image):
+    provider = provider_with([reply(" text of the page \n")], monkeypatch)
+    assert provider.extract_text(page_image, "read") == "text of the page"
+
+
+def test_a_finished_empty_reply_is_a_blank_page(monkeypatch, page_image):
+    provider = provider_with([reply("")], monkeypatch)
+    assert provider.extract_text(page_image, "read") == ""
+
+
+@pytest.mark.parametrize("finish", ["RECITATION", "SAFETY", "PROHIBITED_CONTENT", "OTHER"])
+def test_a_blocked_reply_fails_the_page_with_its_finish_reason(monkeypatch, page_image, finish):
+    provider = provider_with([reply("", finish)], monkeypatch)
+    with pytest.raises(VisionProviderError, match=finish):
+        provider.extract_text(page_image, "read")
+    assert provider.client.models.calls == 1
+
+
+def test_a_reply_that_stopped_halfway_fails_the_page(monkeypatch, page_image):
+    with pytest.raises(VisionProviderError, match="MAX_TOKENS"):
+        provider_with([reply("half of the pa", "MAX_TOKENS")], monkeypatch).extract_text(page_image, "read")
+    with pytest.raises(VisionProviderError, match="RECITATION"):
+        provider_with([reply("half of the pa", "RECITATION")], monkeypatch).extract_text(page_image, "read")
+
+
+def test_a_blocked_request_fails_the_page(monkeypatch, page_image):
+    blocked = types.GenerateContentResponse(
+        prompt_feedback=types.GenerateContentResponsePromptFeedback(block_reason="SAFETY"))
+    with pytest.raises(VisionProviderError, match="SAFETY"):
+        provider_with([blocked], monkeypatch).extract_text(page_image, "read")
+
+
+def test_an_empty_reply_without_a_finish_reason_fails_the_page(monkeypatch, page_image):
+    for response in (SimpleNamespace(text=""), types.GenerateContentResponse(candidates=[])):
+        with pytest.raises(VisionProviderError, match="empty reply"):
+            provider_with([response], monkeypatch).extract_text(page_image, "read")
+
+
+def test_a_reply_without_a_finish_reason_but_with_text_is_accepted(monkeypatch, page_image):
+    assert provider_with([SimpleNamespace(text="text")], monkeypatch).extract_text(page_image, "read") == "text"
+
+
+def test_an_empty_translation_is_never_a_finished_page(monkeypatch):
+    assert provider_with([reply("tr")], monkeypatch).generate_text("hi") == "tr"
+    with pytest.raises(VisionProviderError, match="empty reply"):
+        provider_with([reply("")], monkeypatch).generate_text("hi")
+    with pytest.raises(VisionProviderError, match="MAX_TOKENS"):
+        provider_with([reply("tr", "MAX_TOKENS")], monkeypatch).generate_text("hi")
+
+
+def test_unusual_gateway_values_are_read_as_no_finish_reason(monkeypatch, page_image):
+    for finish in ("", "FINISH_REASON_UNSPECIFIED", None):
+        response = SimpleNamespace(text="text", candidates=[SimpleNamespace(finish_reason=finish)])
+        assert provider_with([response], monkeypatch).extract_text(page_image, "read") == "text"
+        empty = SimpleNamespace(text="", candidates=[SimpleNamespace(finish_reason=finish)])
+        with pytest.raises(VisionProviderError, match="empty reply"):
+            provider_with([empty], monkeypatch).extract_text(page_image, "read")
+
+
+def test_a_block_reason_beats_a_blank_page(monkeypatch, page_image):
+    blocked = types.GenerateContentResponse(
+        candidates=[types.Candidate(finish_reason="STOP")],
+        prompt_feedback=types.GenerateContentResponsePromptFeedback(block_reason="SAFETY"))
+    with pytest.raises(VisionProviderError, match="SAFETY"):
+        provider_with([blocked], monkeypatch).extract_text(page_image, "read")
+    unspecified = SimpleNamespace(
+        text="", prompt_feedback=SimpleNamespace(block_reason=SimpleNamespace(name="BLOCKED_REASON_UNSPECIFIED")))
+    with pytest.raises(VisionProviderError, match="empty reply"):
+        provider_with([unspecified], monkeypatch).extract_text(page_image, "read")
+
+
+def test_unfinished_replies_are_their_own_error_kind(monkeypatch, page_image):
+    with pytest.raises(UnfinishedReplyError):
+        provider_with([reply("", "RECITATION")], monkeypatch).extract_text(page_image, "read")
+    assert not issubclass(AuthenticationError, UnfinishedReplyError)

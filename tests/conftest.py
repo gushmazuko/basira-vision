@@ -22,6 +22,7 @@ class FakeProvider:
         self.raise_on_page = {}  # page -> exception instance
         self.on_page = {}  # page -> callable run before answering
         self.ocr_calls = []
+        self.ocr_requests = []  # (page, prompt, strips, media_resolution, thinking_level)
         self.prompts = []
         self.connection_warning = None
         self.connection_error = None
@@ -35,6 +36,7 @@ class FakeProvider:
                      thinking_level=None) -> str:
         number = int(re.search(r"(\d+)", image_path.stem).group(1))
         self.ocr_calls.append(number)
+        self.ocr_requests.append((number, prompt, strips, media_resolution, thinking_level))
         if number in self.on_page:
             self.on_page[number]()
         if number in self.raise_on_page:
@@ -60,7 +62,8 @@ def provider(monkeypatch, tmp_path):
     monkeypatch.setenv("GEMINI_API_KEY", "test-key")
     for var in ("GEMINI_BASE_URL", "BASIRA_OUTPUT_DIR", "BASIRA_PROMPTS_DIR"):
         monkeypatch.delenv(var, raising=False)
-    monkeypatch.setattr(cli, "create_provider", lambda **kwargs: fake)
+    fake.models = []
+    monkeypatch.setattr(cli, "create_provider", lambda **kwargs: fake.models.append(kwargs["model_name"]) or fake)
     return fake
 
 

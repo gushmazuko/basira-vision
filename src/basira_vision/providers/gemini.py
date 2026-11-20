@@ -17,6 +17,7 @@ from ..utils.errors import (
     AuthenticationError,
     EndpointUnreachableError,
     RateLimitError,
+    UnfinishedReplyError,
     VisionProviderError,
     handle_provider_error,
 )
@@ -54,6 +55,34 @@ def _image_part(image: Any, media_resolution: str) -> types.Part:
         inline_data=types.Blob(data=buffer.getvalue(), mime_type="image/png"),
         media_resolution=types.PartMediaResolution(level=f"MEDIA_RESOLUTION_{media_resolution.upper()}"),
     )
+
+
+def _reply_text(response: Any, blank_ok: bool) -> str:
+    """The text of a model reply, or an error when the reply is not a finished one.
+
+    A reply cut off (MAX_TOKENS) or stopped by the model (RECITATION, SAFETY, ...) fails
+    even when it holds some text, so the page is recorded as failed and ``--resume`` retries
+    it. A reply that finished normally (STOP) with no text is a blank page when ``blank_ok``.
+    """
+    text = (getattr(response, "text", None) or "").strip()
+    candidates = getattr(response, "candidates", None) or []
+    finish = getattr(candidates[0], "finish_reason", None) if candidates else None
+    reason = getattr(finish, "name", finish)
+    if not reason or reason == "FINISH_REASON_UNSPECIFIED":
+        reason = None
+    if reason == "MAX_TOKENS":
+        raise UnfinishedReplyError("reply cut off: MAX_TOKENS")
+    if reason not in (None, "STOP"):
+        raise UnfinishedReplyError(f"reply stopped: {reason}")
+    if text:
+        return text
+    block = getattr(getattr(response, "prompt_feedback", None), "block_reason", None)
+    block = getattr(block, "name", block)
+    if block and block != "BLOCKED_REASON_UNSPECIFIED":
+        raise UnfinishedReplyError(f"request blocked: {block}")
+    if reason == "STOP" and blank_ok:
+        return ""
+    raise UnfinishedReplyError("empty reply" + ("" if reason else " (no finish reason)"))
 
 
 def _is_retryable_code(code: Any) -> bool:
@@ -234,17 +263,14 @@ class GeminiProvider(VisionProvider):
         if usage:
             logger.debug(f"usage {image_path.name}: prompt={usage.prompt_token_count} "
                          f"thoughts={usage.thoughts_token_count} output={usage.candidates_token_count}")
-        text = getattr(response, "text", None) or ""
-        if not text:
-            logger.debug(f"Empty OCR response for {image_path}")
-        return text.strip()
+        return _reply_text(response, blank_ok=True)
 
     @handle_provider_error
     def generate_text(self, prompt: str) -> str:
         """Send a text-only prompt."""
         logger.debug(f"Prompt ({len(prompt)} chars): {prompt[:500]}{'...' if len(prompt) > 500 else ''}")
         response = self._generate_with_retry(prompt)
-        return (getattr(response, "text", None) or "").strip()
+        return _reply_text(response, blank_ok=False)
 
     def check_connection(self) -> Optional[str]:
         """

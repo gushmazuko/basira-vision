@@ -14,7 +14,7 @@ from typing import Callable, Dict, List, Optional, Set, Union
 from .providers import VisionProvider
 from .ui import Reporter
 from .ui.events import PageDone, PageFailed, PageRetrying, PageStarted, StopRequested
-from .utils.errors import AuthenticationError, BasiraError, RateLimitError
+from .utils.errors import AuthenticationError, BasiraError, RateLimitError, UnfinishedReplyError
 from .utils.pages import PageFile
 
 MAX_CONSECUTIVE_FAILURES = 5
@@ -135,6 +135,8 @@ def run_pages(
                     page_file.fail_page(task.page, reason)
                     result.failed[task.page] = reason
                     reporter.emit(PageFailed(task.page, reason, time.monotonic() - page_started))
+                    if isinstance(e, UnfinishedReplyError):
+                        continue  # this page's problem, not a sign the endpoint is down
                     consecutive_failures += 1
                     if consecutive_failures >= MAX_CONSECUTIVE_FAILURES:
                         result.outcome = "stopped"

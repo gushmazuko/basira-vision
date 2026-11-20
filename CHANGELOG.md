@@ -6,6 +6,42 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.2.3] - 2026-11-20
+
+- `--overwrite` replaces an existing output on purpose, and replaces
+  `--force-restart` (still accepted, hidden). Without `--page-range` it
+  deletes the output and starts over, as `--force-restart` did (so does a
+  range that covers every page). With
+  `--page-range` it replaces only those pages and keeps the other pages and
+  the file's settings; a typed option that differs from the file stops the
+  run. Before, `--force-restart` deleted the whole file even when a page
+  range was given.
+- A page the model did not finish is recorded as failed, with the finish
+  reason in the marker (`<!-- Page 9 - Error: reply stopped: RECITATION -->`),
+  so `--resume` retries it. Before, an empty reply (RECITATION, SAFETY, no
+  candidate) or a reply cut off at the token limit was stored as a finished
+  page and `--resume` skipped it. A reply that finished normally with no text
+  is still a blank page. The same applies to translation: an empty reply for
+  a page with text fails the page. Such pages do not count toward the five
+  failures in a row that stop a run.
+- If an `--overwrite` of some pages is interrupted or stopped, the hint
+  continues it with `--overwrite` and the pages not reached; `--resume`
+  would skip them, because they still hold their old text.
+- `--resume` continues with the settings recorded in the file instead of
+  the command line's defaults: `ocr` records the language, model, prompt,
+  prompts directory, `--dpi`, `--strips`, `--media-resolution`,
+  `--thinking-level` and `--image-format`; `translate` the target language,
+  model, prompt and prompts directory. Before, `basira ocr book.pdf --resume`
+  retried failed pages with the English prompt and no strips. A typed option
+  that differs from the file stops the run, and `--resume` without an
+  existing output stops instead of starting a new file.
+- Recorded paths (`--custom-prompt` file, `--prompts-dir`) are relative to
+  the output file, or start with `~/`, so a shared file carries no user name;
+  a missing prompt file or folder stops a resume instead of falling back to
+  the built-in prompt.
+- `translate` refuses an output that would overwrite its own source (for
+  example `book_english.md` into English).
+
 ## [0.2.2] - 2026-11-18
 
 - `ocr` and `translate` write `basira_version` into the frontmatter, next to
@@ -53,7 +89,7 @@ First public release.
   built-in template and prompts to edit.
 - Resumable runs: `--resume` processes only missing or failed pages, so
   chunked `--page-range` runs and retries work. Existing output is never
-  replaced without `--resume` or `--force-restart`.
+  replaced without `--resume` or `--overwrite`.
 - Terminal output: a live view with a page-map progress bar, ETA, retry and
   rate-limit countdowns and a summary that names the next command; plain
   logfmt lines when not on a terminal; `--log-format json`.
@@ -66,7 +102,8 @@ First public release.
 - Custom prompt directories (`--prompts-dir`, `BASIRA_PROMPTS_DIR`).
 - Gemini-protocol gateways via `GEMINI_BASE_URL`.
 
-[Unreleased]: https://github.com/gushmazuko/basira-vision/compare/v0.2.2...HEAD
+[Unreleased]: https://github.com/gushmazuko/basira-vision/compare/v0.2.3...HEAD
+[0.2.3]: https://github.com/gushmazuko/basira-vision/compare/v0.2.2...v0.2.3
 [0.2.2]: https://github.com/gushmazuko/basira-vision/compare/v0.2.1...v0.2.2
 [0.2.1]: https://github.com/gushmazuko/basira-vision/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/gushmazuko/basira-vision/compare/v0.1.0...v0.2.0

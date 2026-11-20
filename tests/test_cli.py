@@ -99,11 +99,11 @@ def test_existing_output_is_never_replaced_silently(provider, make_pdf, tmp_path
     assert result.exit_code == 1
     assert "already exists (2 of 2 pages done). Nothing was changed." in result.stderr
     assert "basira ocr book.pdf --resume" in result.stderr
-    assert "basira ocr book.pdf --force-restart" in result.stderr
+    assert "basira ocr book.pdf --overwrite" in result.stderr
     assert "my manual fix" in output.read_text()
     assert provider.ocr_calls == []
 
-    assert run("ocr", pdf, "--force-restart").exit_code == 0
+    assert run("ocr", pdf, "--overwrite").exit_code == 0
     assert "my manual fix" not in output.read_text()
 
 
@@ -186,7 +186,7 @@ def test_ocr_fails_when_every_page_fails(provider, make_pdf):
 def test_ocr_rejects_bad_input(provider, make_pdf):
     pdf = make_pdf(2)
     assert run("ocr", pdf, "--page-range", "5-6").exit_code == 2
-    assert run("ocr", pdf, "--resume", "--force-restart").exit_code == 2
+    assert run("ocr", pdf, "--resume", "--overwrite").exit_code == 2
     result = run("ocr", pdf, "--source-language", "klingon")
     assert result.exit_code == 1 and "Available" in result.stderr
 
