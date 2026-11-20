@@ -6,103 +6,116 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.2.4] - 2026-11-21
+
+Page-level `--overwrite` now accepts its own settings, and hints are more accurate.
+
+### Changed
+
+- Apply options typed with `ocr --page-range N --overwrite` to the replaced pages instead of stopping when they differ from the file
+- Warn which settings differ in such a run, and keep the file's own settings in the frontmatter
+- Suggest `--overwrite`, not `--resume`, to retry pages that failed in such a run
+- Keep the file's settings in the "start over" hint when only some options are typed
+
+### Added
+
+- Read pages with the language prompt through `--custom-prompt ""` when the file was made with a custom prompt
+- Name pages that failed in an earlier run when the current run did not touch them
+
+### Fixed
+
+- Stop `--resume` and page `--overwrite` when the frontmatter cannot be read, instead of continuing with default settings
+- Report a `--prompts-dir` that does not exist as such on a new run
+- Show an inline `--custom-prompt` as "inline text" in messages, not as a fingerprint
+- Accept finish reasons from a gateway in any letter case
+
+**Upgrading:** a page the model refuses can be read again with another prompt:
+`basira ocr book.pdf --page-range 100 --overwrite --custom-prompt other.txt`
+
 ## [0.2.3] - 2026-11-20
 
-- `--overwrite` replaces an existing output on purpose, and replaces
-  `--force-restart` (still accepted, hidden). Without `--page-range` it
-  deletes the output and starts over, as `--force-restart` did (so does a
-  range that covers every page). With
-  `--page-range` it replaces only those pages and keeps the other pages and
-  the file's settings; a typed option that differs from the file stops the
-  run. Before, `--force-restart` deleted the whole file even when a page
-  range was given.
-- A page the model did not finish is recorded as failed, with the finish
-  reason in the marker (`<!-- Page 9 - Error: reply stopped: RECITATION -->`),
-  so `--resume` retries it. Before, an empty reply (RECITATION, SAFETY, no
-  candidate) or a reply cut off at the token limit was stored as a finished
-  page and `--resume` skipped it. A reply that finished normally with no text
-  is still a blank page. The same applies to translation: an empty reply for
-  a page with text fails the page. Such pages do not count toward the five
-  failures in a row that stop a run.
-- If an `--overwrite` of some pages is interrupted or stopped, the hint
-  continues it with `--overwrite` and the pages not reached; `--resume`
-  would skip them, because they still hold their old text.
-- `--resume` continues with the settings recorded in the file instead of
-  the command line's defaults: `ocr` records the language, model, prompt,
-  prompts directory, `--dpi`, `--strips`, `--media-resolution`,
-  `--thinking-level` and `--image-format`; `translate` the target language,
-  model, prompt and prompts directory. Before, `basira ocr book.pdf --resume`
-  retried failed pages with the English prompt and no strips. A typed option
-  that differs from the file stops the run, and `--resume` without an
-  existing output stops instead of starting a new file.
-- Recorded paths (`--custom-prompt` file, `--prompts-dir`) are relative to
-  the output file, or start with `~/`, so a shared file carries no user name;
-  a missing prompt file or folder stops a resume instead of falling back to
-  the built-in prompt.
-- `translate` refuses an output that would overwrite its own source (for
-  example `book_english.md` into English).
+`--overwrite` replaces `--force-restart`, `--resume` keeps the file's settings, and pages the model did not finish are retried.
+
+### Changed
+
+- Continue `--resume` with the settings recorded in the output file instead of the command line's defaults
+- Stop `--resume` when a typed option differs from the file, or when there is no output to continue
+- Stop `--resume` when the recorded prompt file or folder is missing, instead of falling back to the built-in prompt
+- Record the paths of a `--custom-prompt` file and of `--prompts-dir` relative to the output file or under `~/`, so a shared file carries no user name
+
+### Added
+
+- Add `--overwrite` in place of `--force-restart` (still accepted): without `--page-range` it starts over, with it it replaces only those pages
+- Record the settings that shape the text in the frontmatter: language, model, prompt, prompts directory, and for `ocr` also `--dpi`, `--strips`, `--media-resolution`, `--thinking-level` and `--image-format`
+
+### Fixed
+
+- Record a page the model did not finish (blocked, cut off at the token limit, or an empty reply) as failed with the reason in its marker, so `--resume` retries it instead of skipping it
+- Fail a translation page when the model returns no text for it
+- Leave such pages out of the five failures in a row that stop a run
+- Continue an interrupted page `--overwrite` with `--overwrite` in the hint, since `--resume` would skip the pages not reached
+- Refuse a `translate` output that would overwrite its own source
+- Replace only the given pages when `--page-range` is used; `--force-restart` deleted the whole file
+
+**Upgrading:** a page skipped by an earlier version looks like an empty `<!-- Page N -->` block. Read it again with
+`basira ocr book.pdf --page-range N --overwrite`.
 
 ## [0.2.2] - 2026-11-18
 
-- `ocr` and `translate` write `basira_version` into the frontmatter, next to
-  `ai_model`. With `--resume` it keeps the version that started the file.
-- README, Limitations: the model can rarely write its own reasoning into
-  the page text.
+### Added
+
+- Write `basira_version` into the frontmatter of `ocr` and `translate` outputs; `--resume` keeps the version that started the file
+- Document in the README that the model can rarely write its own reasoning into the page text
 
 ## [0.2.1] - 2026-11-14
 
-- The default model is now `gemini-4-hydrogen` (was `gemini-3.8-flash`).
-- Chechen OCR prompt: the palochka's case follows the spelling rules, since
-  print does not show it: Ӏ where a capital belongs (start of a sentence or a
-  proper name, words in capitals), ӏ everywhere else, including digraphs.
-  0.2.0 asked the model to keep the printed case, which made it mix Ӏ and ӏ.
-- `--dpi` help no longer suggests 600 dpi; use `--strips` for small print.
-- README: accuracy measurements on a Chechen book and advice on the OCR
-  options, without speed or cost claims; full method in docs/benchmark.md.
+### Changed
+
+- Default to the `gemini-4-hydrogen` model (was `gemini-3.8-flash`)
+- Choose the palochka's case by the spelling rules in the Chechen OCR prompt: Ӏ where a capital belongs, ӏ everywhere else, including digraphs (0.2.0 kept the printed case, which mixed the two)
+- Stop suggesting 600 dpi in the `--dpi` help; use `--strips` for small print
+
+### Added
+
+- Document accuracy measurements on a Chechen book and advice on the OCR options in the README and docs/benchmark.md
 
 ## [0.2.0] - 2026-11-14
 
-- `basira ocr --strips N`: sends the page together with N overlapping
-  full-resolution strips of it in one request, for small letters and signs.
-- `basira ocr --thinking-level low|medium|high|xhigh` sets the model's
-  reasoning effort; without it the model uses its own default.
-- `basira ocr --media-resolution low|medium|high|ultra_high` sets the token
-  budget per image.
-- OCR requests with strips or `ultra_high` use a 300 s timeout instead of 120 s.
-- With `-v`, the token usage of every page is logged (prompt, thoughts, output).
-- Chechen OCR prompt: verbatim transcription (no spelling corrections or
-  modernization, careful ь/ъ and doubled letters), Cyrillic І/і listed
-  among the palochka lookalikes, paragraphs joined and line-end hyphenation
-  removed. The palochka keeps its printed case, as before.
+### Changed
+
+- Transcribe Chechen verbatim: no spelling corrections or modernization, careful ь/ъ and doubled letters, paragraphs joined and line-end hyphenation removed
+- List Cyrillic І/і among the palochka lookalikes in the Chechen OCR prompt
+- Use a 300 s timeout instead of 120 s for OCR requests with strips or `ultra_high`
+
+### Added
+
+- Add `ocr --strips N` to send the page with N overlapping full-resolution strips of it in one request, for small letters and signs
+- Add `ocr --thinking-level low|medium|high|xhigh` to set the model's reasoning effort
+- Add `ocr --media-resolution low|medium|high|ultra_high` to set the token budget per image
+- Log the token usage of every page (prompt, thoughts, output) with `-v`
 
 ## [0.1.0] - 2026-11-09
 
 First public release.
 
-- `basira ocr` and `basira translate` for Arabic, Chechen, English, French,
-  German and Russian: vision OCR of scanned PDFs, and page-by-page
-  translation with the previous page as context.
-- `basira typst`: A5 book typesetting with Pandoc and an editable Typst
-  template that holds all the layout; `--template` uses your own copy.
-  The page count is always even: a blank last page is added when needed.
-- `basira export template` and `basira export prompts` write copies of the
-  built-in template and prompts to edit.
-- Resumable runs: `--resume` processes only missing or failed pages, so
-  chunked `--page-range` runs and retries work. Existing output is never
-  replaced without `--resume` or `--overwrite`.
-- Terminal output: a live view with a page-map progress bar, ETA, retry and
-  rate-limit countdowns and a summary that names the next command; plain
-  logfmt lines when not on a terminal; `--log-format json`.
-- Ctrl-C finishes the current page before stopping; a second Ctrl-C stops
-  at once. A run stops after 5 failed pages in a row, and an unreachable
-  endpoint or rejected key is reported before the first page.
-- Failed pages keep their reason in the page marker and never reach the
-  typeset book; `typst` names them in a warning.
-- Exit codes: 0 done, 3 done with failed pages, 1 error, 2 usage, 130 paused.
-- Custom prompt directories (`--prompts-dir`, `BASIRA_PROMPTS_DIR`).
-- Gemini-protocol gateways via `GEMINI_BASE_URL`.
+### Added
 
-[Unreleased]: https://github.com/gushmazuko/basira-vision/compare/v0.2.3...HEAD
+- Add `basira ocr` and `basira translate` for Arabic, Chechen, English, French, German and Russian: vision OCR of scanned PDFs, and page-by-page translation with the previous page as context
+- Add `basira typst`: A5 book typesetting with Pandoc and an editable Typst template that holds all the layout; `--template` uses your own copy
+- Keep the page count of the typeset book even by adding a blank last page when needed
+- Add `basira export template` and `basira export prompts` to write editable copies of the built-in template and prompts
+- Add resumable runs: `--resume` processes only missing or failed pages, so chunked `--page-range` runs and retries work
+- Never replace an existing output without `--resume` or `--force-restart`
+- Add a live terminal view with a page-map progress bar, ETA, retry and rate-limit countdowns and a summary that names the next command; plain logfmt lines when not on a terminal; `--log-format json`
+- Finish the current page on Ctrl-C before stopping; stop at once on a second Ctrl-C
+- Stop a run after 5 failed pages in a row, and report an unreachable endpoint or a rejected key before the first page
+- Keep the reason of a failed page in its marker; failed pages never reach the typeset book, and `typst` names them in a warning
+- Add exit codes: 0 done, 3 done with failed pages, 1 error, 2 usage, 130 paused
+- Add custom prompt directories (`--prompts-dir`, `BASIRA_PROMPTS_DIR`)
+- Add Gemini-protocol gateways through `GEMINI_BASE_URL`
+
+[Unreleased]: https://github.com/gushmazuko/basira-vision/compare/v0.2.4...HEAD
+[0.2.4]: https://github.com/gushmazuko/basira-vision/compare/v0.2.3...v0.2.4
 [0.2.3]: https://github.com/gushmazuko/basira-vision/compare/v0.2.2...v0.2.3
 [0.2.2]: https://github.com/gushmazuko/basira-vision/compare/v0.2.1...v0.2.2
 [0.2.1]: https://github.com/gushmazuko/basira-vision/compare/v0.2.0...v0.2.1

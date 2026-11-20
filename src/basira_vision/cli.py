@@ -10,7 +10,7 @@ import tempfile
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional
+from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
 
 import click
 import pymupdf
@@ -35,7 +35,7 @@ from .ui.events import RunFinished, RunStarted, StepDone, StepStarted
 from .ui.state import pages_label
 from .utils.constants import DEFAULT_TARGET_LANGUAGE, SeparatorType
 from .utils.errors import AuthenticationError, BasiraError, ConfigurationError, EndpointUnreachableError
-from .utils.pages import PageFile, describe_existing, read_page_document
+from .utils.pages import PageFile, describe_existing, read_page_document, split_frontmatter
 
 PROVIDER_NAME = "Gemini"
 
@@ -262,15 +262,28 @@ def _stored_path(value: Optional[str], output_path: Path) -> Optional[Path]:
 
 
 def _resume_settings(output_path: Path, current: Dict[str, Any], options: Dict[str, str],
-                     continue_command: List, typed_rerun: List, mode: str = "--resume") -> Dict[str, Any]:
+                     continue_command: List, restart_command: Callable[[Dict[str, Any], Iterable[str]], List],
+                     typed_wins: bool = False) -> Tuple[Dict[str, Any], Dict[str, str]]:
     """The settings a --resume (or an --overwrite of some pages) continues with.
 
-    Each setting recorded in the file wins over the default; one typed on the command line
-    with a different value stops the run instead of mixing two configurations in one file.
+    Each setting recorded in the file wins over the default. One typed on the command line
+    with a different value stops a --resume instead of mixing two configurations in one file.
+    An --overwrite of some pages is a deliberate choice for those pages (``typed_wins``): the
+    typed value is used, and the differences (setting -> description) are returned so the run
+    can say so.
+
+    ``restart_command(settings, typed)`` builds the command that starts over: the file's
+    settings with the typed ones on top, so starting over changes only what the user asked for.
     """
-    meta, _ = read_page_document(output_path.read_text(encoding="utf-8"))
+    meta, raw, _ = split_frontmatter(output_path.read_text(encoding="utf-8"))
+    if raw.strip() and not meta:
+        # Going on would read the pages with the built-in defaults instead of the file's settings.
+        raise CommandError(
+            f"{display_path(output_path)} has a frontmatter that cannot be read. Nothing was changed.",
+            [Hint("fix", "correct the frontmatter, or start over with --overwrite (all pages)")],
+        )
     resolved = dict(current)
-    conflicts = []
+    conflicts: Dict[str, str] = {}
     for key, option in options.items():
         if key not in meta:
             continue
@@ -283,26 +296,48 @@ def _resume_settings(output_path: Path, current: Dict[str, Any], options: Dict[s
                 [Hint("fix", "correct the value in the frontmatter, or start over with --overwrite (all pages)")],
             ) from None
         if _typed(option) and current[key] != stored:
-            conflicts.append(f"--{option.replace('_', '-')} is {_shown(current[key])}, "
-                             f"the file has {_shown(stored)}")
+            conflicts[key] = _difference(option, key, current[key], stored)
         else:
             resolved[key] = stored
-    if conflicts:
+    if conflicts and not typed_wins:
         raise CommandError(
-            f"{display_path(output_path)} was made with other settings ({'; '.join(conflicts)}). "
+            f"{display_path(output_path)} was made with other settings ({'; '.join(conflicts.values())}). "
             "Nothing was changed.",
             [
-                Hint("continue", command_line(*continue_command, mode), command=True,
+                Hint("continue", command_line(*continue_command, "--resume"), command=True,
                      note="with the file's settings"),
-                Hint("restart", command_line(*_without_range(typed_rerun), "--overwrite"), command=True,
-                     note="deletes the file and starts over with the new settings"),
+                Hint("restart", command_line(*_without_range(restart_command(resolved, conflicts)), "--overwrite"),
+                     command=True, note="deletes the file and starts over with the new settings"),
             ],
         )
-    return resolved
+    return resolved, conflicts
 
 
 def _shown(value: Any) -> str:
-    return "not set" if value is None else str(value)
+    if value is None:
+        return "not set"
+    return "inline text" if str(value).startswith(_INLINE_PROMPT) else str(value)
+
+
+def _difference(option: str, key: str, typed: Any, stored: Any) -> str:
+    """``--strips is 2, the file has 3``: how a typed setting differs from the file's."""
+    name = f"--{option.replace('_', '-')}"
+    if key == "custom_prompt" and typed and stored and typed.startswith(_INLINE_PROMPT) \
+            and stored.startswith(_INLINE_PROMPT):
+        return f"{name} is another text than the file's"
+    return f"{name} is {_shown(typed)}, the file has {_shown(stored)}"
+
+
+def _hint_prompt(values: Dict[str, Any], custom_prompt: Optional[str], output_path: Path) -> Any:
+    """The --custom-prompt value that reproduces these settings in a suggested command."""
+    recorded = values["custom_prompt"]
+    if recorded is None:
+        return None
+    if custom_prompt:  # typed: the settings carry it
+        return custom_prompt
+    if recorded.startswith(_INLINE_PROMPT):  # the text itself is not in the file
+        return Placeholder("<the same text>")
+    return _stored_path(recorded, output_path)
 
 
 def _require_resumable(output_path: Path, resume: bool, others: Iterable[Path] = ()) -> None:
@@ -317,13 +352,20 @@ def _require_resumable(output_path: Path, resume: bool, others: Iterable[Path] =
 
 
 def _load_prompt(stage: str, values: Dict[str, Any], custom_prompt: Optional[str],
-                 output_path: Path, mode: str = "--resume") -> tuple:
-    """Load the prompt the settings name; return (text, label, --custom-prompt value for hints)."""
+                 output_path: Path, mode: str = "--resume", from_file: bool = True) -> tuple:
+    """Load the prompt the settings name; return (text, label, --custom-prompt value for hints).
+
+    ``from_file``: the prompt directory is the one recorded in the output file (a continued
+    run), not one given for this run.
+    """
     recorded = values["custom_prompt"]
     if recorded is None:
         language = values["source_language" if stage == "ocr" else "target_language"]
         prompts_dir = _stored_path(values["prompts_dir"], output_path)
         if prompts_dir is not None and not prompts_dir.is_dir():
+            if not from_file:
+                raise CommandError(f"the prompt directory does not exist: {display_path(prompts_dir)}",
+                                   [Hint("check", "--prompts-dir, or BASIRA_PROMPTS_DIR in the environment")])
             raise CommandError(f"the prompt directory of {display_path(output_path)} is missing: "
                                f"{display_path(prompts_dir)}",
                                [Hint("continue", "restore it, or start over with --overwrite (all pages)")])
@@ -418,25 +460,50 @@ def _finish(reporter: Reporter, stage: str, result: RunResult, page_file: PageFi
     return result.exit_code()
 
 
-def _resume_hints(result: RunResult, rerun: List, unreached: Optional[List[int]] = None) -> List[Hint]:
-    """What to run next. ``unreached`` are pages of an --overwrite that still hold their old text:
-    --resume would skip them as done, so they are continued with --overwrite."""
+def _span(pages: Iterable[int]) -> Optional[str]:
+    """``5`` or ``5-9`` for pages without a gap, as --page-range takes them; None otherwise."""
+    pages = sorted(pages)
+    if not pages or pages[-1] - pages[0] + 1 != len(pages):
+        return None
+    return str(pages[0]) if len(pages) == 1 else f"{pages[0]}-{pages[-1]}"
+
+
+def _resume_hints(result: RunResult, rerun: List, unreached: Optional[List[int]] = None,
+                  typed_settings: bool = False) -> List[Hint]:
+    """What to run next.
+
+    ``unreached`` are pages of an --overwrite that still hold their old text: --resume would
+    skip them as done, so they are continued with --overwrite. ``typed_settings``: the pages
+    were read with typed settings that differ from the file, which --resume refuses, so the
+    failed ones are read again with --overwrite too.
+    """
     resume = command_line(*rerun, "--resume")
+    retry = Hint("retry", resume, command=True, note="retries only the failed pages")
+    if typed_settings and result.failed:
+        span = _span(result.failed)
+        if span:
+            retry = Hint("retry", command_line(*_without_range(rerun), "--page-range", span, "--overwrite"),
+                         command=True, note=f"reads {pages_label(result.failed)} again with the same settings"
+                         + (", once the cause is fixed" if result.outcome == "stopped" else ""))
+        else:
+            retry = Hint("retry", f"{pages_label(result.failed)} failed",
+                         note="read them again with --page-range … --overwrite and the same options")
     if unreached and result.outcome in ("paused", "stopped"):
-        first, last = min(unreached), max(unreached)
-        span = str(first) if first == last else f"{first}-{last}"
-        hints = [Hint("continue", command_line(*_without_range(rerun), "--page-range", span, "--overwrite"),
+        hints = [Hint("continue",
+                      command_line(*_without_range(rerun), "--page-range", _span(unreached), "--overwrite"),
                       command=True, note=f"replaces {pages_label(unreached)}, not reached yet"
                       + (" (once the cause is fixed)" if result.outcome == "stopped" else ""))]
         if result.failed:
-            hints.append(Hint("retry", resume, command=True, note="retries only the failed pages"))
+            hints.append(retry)
         return hints
+    if typed_settings:
+        return [retry] if result.failed else []
     if result.outcome == "paused":
         return [Hint("continue", resume, command=True)]
     if result.outcome == "stopped":
         return [Hint("continue", resume, command=True, note="once the cause is fixed")]
     if result.failed:
-        return [Hint("retry", resume, command=True, note="retries only the failed pages")]
+        return [retry]
     return []
 
 
@@ -489,7 +556,7 @@ def main():
 @click.option("--no-images", is_flag=True, help="Do not keep the rendered page images")
 @click.option("--resume", is_flag=True, help="Keep finished pages and process only missing or failed ones")
 @_overwrite_options("Replace the existing output: all of it, or only the pages of --page-range "
-                    "(the other pages and the file's settings stay)")
+                    "(the other pages stay; options you type apply to the replaced pages only)")
 @_command("ocr")
 def ocr(reporter, pdf_file, source_language, page_range, dpi, strips, media_resolution, thinking_level, model,
         custom_prompt, prompts_dir, output_dir, image_format, no_images, resume, overwrite, force_restart):
@@ -522,36 +589,49 @@ def ocr(reporter, pdf_file, source_language, page_range, dpi, strips, media_reso
         "image_format": image_format.upper(),
     }
 
-    def command(values: Dict[str, Any], prompt_arg: Optional[str]) -> List:
+    def command(values: Dict[str, Any], prompt_arg: Optional[str], keep: Iterable[str] = ()) -> List:
+        """The command line for these settings. A default is left out, unless the setting is in
+        ``keep``: typed against the file, it has to be typed again to win over the file."""
+
+        def default(key: str, value: Any) -> Any:
+            return None if key in keep else value
+
         return [
             *base,
-            *_option("--source-language", values["source_language"], "english"),
-            *_option("--custom-prompt", prompt_arg),
+            *_option("--source-language", values["source_language"], default("source_language", "english")),
+            # typed empty against a file with a prompt: "no custom prompt" has to be typed again too
+            *(["--custom-prompt", ""] if prompt_arg is None and "custom_prompt" in keep
+              else _option("--custom-prompt", prompt_arg)),
             *_option("--prompts-dir", _stored_path(values["prompts_dir"], output_path)),
-            *_option("--model", model),
-            *_option("--dpi", values["dpi"], 300),
-            *_option("--strips", values["strips"], 0),
+            *_option("--model", values["ai_model"], default("ai_model", settings.gemini_model)),
+            *_option("--dpi", values["dpi"], default("dpi", 300)),
+            *_option("--strips", values["strips"], default("strips", 0)),
             *_option("--media-resolution", values["media_resolution"]),
             *_option("--thinking-level", values["thinking_level"]),
-            *_option("--image-format", values["image_format"], "PNG"),
+            *_option("--image-format", values["image_format"], default("image_format", "PNG")),
         ]
 
-    # An --overwrite of some pages replaces just them, so it continues the same file like --resume.
+    # An --overwrite of some pages replaces just them, so it continues the same file like --resume:
+    # what the user did not type comes from the file. What they typed is their choice for those pages.
     partial = len(requested) < total
     keep_file = resume or (overwrite and partial and output_path.exists())
+    typed_settings: Dict[str, str] = {}
     _require_resumable(output_path, resume)
     if keep_file:
-        run_settings = _resume_settings(output_path, run_settings, _OCR_SETTINGS,
-                                        [*base, *_inline_prompt_option(run_settings, custom_prompt)],
-                                        command(run_settings, custom_prompt), "--resume" if resume else "--overwrite")
+        run_settings, typed_settings = _resume_settings(
+            output_path, run_settings, _OCR_SETTINGS,
+            [*base, *_inline_prompt_option(run_settings, custom_prompt)],
+            lambda values, typed: command(values, _hint_prompt(values, custom_prompt, output_path), typed),
+            typed_wins=not resume)
     prompt, prompt_label, prompt_arg = _load_prompt("ocr", run_settings, custom_prompt, output_path,
-                                                     "--resume" if resume else "--overwrite")
+                                                     "--resume" if resume else "--overwrite",
+                                                     from_file=keep_file and not _typed("prompts_dir"))
     source_language = run_settings["source_language"]
     model_name = run_settings["ai_model"]
     dpi, strips = run_settings["dpi"], run_settings["strips"]
     media_resolution, thinking_level = run_settings["media_resolution"], run_settings["thinking_level"]
     image_format = run_settings["image_format"]
-    rerun = command(run_settings, prompt_arg)
+    rerun = command(run_settings, prompt_arg, typed_settings)
     _refuse_overwrite(output_path, total, resume, overwrite, rerun, requested if partial else None)
 
     provider = _connect(settings, model_name, reporter)
@@ -592,6 +672,17 @@ def ocr(reporter, pdf_file, source_language, page_range, dpi, strips, media_reso
                              pages=list(range(1, total + 1)), todo=todo, done_before=sorted(done_before)))
     if replacing and keep_file:
         reporter.warn(f"replacing {pages_label(requested)}, the other pages stay")
+        verb, pronoun = ("is", "it is") if len(requested) == 1 else ("are", "they are")
+        # With a custom prompt the language and the prompt directory do not choose the prompt.
+        unused = {"source_language", "prompts_dir"} if run_settings["custom_prompt"] is not None else set()
+        differing = [text for key, text in typed_settings.items() if key not in unused]
+        if differing:
+            reporter.warn(f"{pages_label(requested)} {verb} read with other settings than the file "
+                          f"({'; '.join(differing)}); the frontmatter keeps the file's settings")
+        ignored = [f"--{_OCR_SETTINGS[key].replace('_', '-')}" for key in typed_settings if key in unused]
+        if ignored:
+            reporter.warn(f"{' and '.join(ignored)} {'has' if len(ignored) == 1 else 'have'} no effect on "
+                          f"{pages_label(requested)}: {pronoun} read with the --custom-prompt")
     elif replacing:
         reporter.warn("starting over: the previous output was deleted")
     if not todo:
@@ -610,18 +701,23 @@ def ocr(reporter, pdf_file, source_language, page_range, dpi, strips, media_reso
 
     unreached = [n for n in requested if overwrite and keep_file and n not in result.done
                  and n not in result.failed]
-    hints = _resume_hints(result, rerun, unreached)
+    hints = _resume_hints(result, rerun, unreached, bool(typed_settings))
     outside = set(range(1, total + 1)) - page_file.completed() - set(page_file.failed()) - set(requested)
     if outside and result.outcome == "done":
-        first, last = min(outside), max(outside)
-        if last - first + 1 == len(outside):
-            without_range = _without_range(rerun)
-            span = str(first) if first == last else f"{first}-{last}"
-            hints.append(Hint("remaining", command_line(*without_range, "--page-range", span, "--resume"),
+        span = _span(outside)
+        if span and not typed_settings:  # a --resume refuses typed settings that differ from the file
+            hints.append(Hint("remaining", command_line(*_without_range(rerun), "--page-range", span, "--resume"),
                               command=True, note=f"{pages_label(outside)} not processed yet"))
         else:
-            hints.append(Hint("remaining", f"{pages_label(outside)} not processed yet",
-                              note="process them with --page-range … --resume"))
+            how = f"process {'it' if len(outside) == 1 else 'them'} with --page-range … --resume"
+            if typed_settings:
+                how += ", without the options typed for this run"
+            hints.append(Hint("remaining", f"{pages_label(outside)} not processed yet", note=how))
+    earlier = sorted(set(page_file.failed()) - set(result.failed))
+    if earlier and result.outcome == "done":
+        # This run did not touch them; without a word they would look finished.
+        hints.append(Hint("failed", f"{pages_label(earlier)} failed in an earlier run",
+                          note=f"retry {'it' if len(earlier) == 1 else 'them'} with --resume"))
     hints.append(Hint("output", display_path(output_path)))
     if images_dir:
         hints.append(Hint("images", display_path(images_dir)))
@@ -687,7 +783,7 @@ def translate(reporter, markdown_file, target_language, model, custom_prompt, pr
             *_option("--output", output),
             *_option("--custom-prompt", prompt_arg),
             *_option("--prompts-dir", _stored_path(values["prompts_dir"], output_path)),
-            *_option("--model", model),
+            *_option("--model", values["ai_model"], settings.gemini_model),
         ]
 
     # The output file is named after the target language, so a --resume without it would look
@@ -699,10 +795,12 @@ def translate(reporter, markdown_file, target_language, model, custom_prompt, pr
                   if p.is_file() and p != markdown_file and _translation_of(p)]
     _require_resumable(output_path, resume, others)
     if resume:
-        run_settings = _resume_settings(output_path, run_settings, _TRANSLATE_SETTINGS,
-                                        [*base, *_inline_prompt_option(run_settings, custom_prompt)],
-                                        command(run_settings, custom_prompt))
-    template, _, prompt_arg = _load_prompt("translate", run_settings, custom_prompt, output_path)
+        run_settings, _ = _resume_settings(output_path, run_settings, _TRANSLATE_SETTINGS,
+                                           [*base, *_inline_prompt_option(run_settings, custom_prompt)],
+                                           lambda values, typed: command(
+                                               values, _hint_prompt(values, custom_prompt, output_path)))
+    template, _, prompt_arg = _load_prompt("translate", run_settings, custom_prompt, output_path,
+                                           from_file=resume and not _typed("prompts_dir"))
     check_translation_template(template)
     target_language = run_settings["target_language"]
     model_name = run_settings["ai_model"]

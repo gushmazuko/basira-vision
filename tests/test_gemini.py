@@ -255,3 +255,11 @@ def test_unfinished_replies_are_their_own_error_kind(monkeypatch, page_image):
     with pytest.raises(UnfinishedReplyError):
         provider_with([reply("", "RECITATION")], monkeypatch).extract_text(page_image, "read")
     assert not issubclass(AuthenticationError, UnfinishedReplyError)
+
+
+def test_finish_reasons_are_read_in_any_case(monkeypatch, page_image):
+    lower = SimpleNamespace(text="text", candidates=[SimpleNamespace(finish_reason="stop")])
+    assert provider_with([lower], monkeypatch).extract_text(page_image, "read") == "text"
+    cut = SimpleNamespace(text="half", candidates=[SimpleNamespace(finish_reason="max_tokens")])
+    with pytest.raises(UnfinishedReplyError, match="MAX_TOKENS"):
+        provider_with([cut], monkeypatch).extract_text(page_image, "read")

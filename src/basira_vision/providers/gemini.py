@@ -67,7 +67,7 @@ def _reply_text(response: Any, blank_ok: bool) -> str:
     text = (getattr(response, "text", None) or "").strip()
     candidates = getattr(response, "candidates", None) or []
     finish = getattr(candidates[0], "finish_reason", None) if candidates else None
-    reason = getattr(finish, "name", finish)
+    reason = str(getattr(finish, "name", finish) or "").upper()  # an enum, or any spelling from a gateway
     if not reason or reason == "FINISH_REASON_UNSPECIFIED":
         reason = None
     if reason == "MAX_TOKENS":

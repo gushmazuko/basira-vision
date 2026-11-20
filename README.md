@@ -114,6 +114,19 @@ and leaves the rest of the file, and its settings, alone:
 basira ocr mybook.pdf --page-range 7-9 --overwrite   # read pages 7-9 again
 ```
 
+Options typed together with `--page-range … --overwrite` apply to those
+pages only, so a single page can be read again in another way, for example
+with another prompt when the model refuses it:
+
+```bash
+basira ocr mybook.pdf --page-range 100 --overwrite --custom-prompt other-prompt.txt
+```
+
+The run says which settings differ from the file. The frontmatter keeps the
+file's own settings, and `--resume` keeps using them. If the file was made
+with a custom prompt, `--custom-prompt ""` reads the pages with the language
+prompt instead.
+
 A page the model did not finish (blocked, for example RECITATION, or cut off
 at the token limit) is recorded as failed with the reason, so `--resume`
 retries it. A page the model finished with no text at all is kept as a
@@ -245,7 +258,7 @@ them also take `--log-format auto|live|plain|json` and `-v`/`--verbose`.
 | `--output-dir` | workspace directory (default `./workspace`) |
 | `--image-format` | format of the rendered page images: `PNG` (default), `JPEG` or `TIFF` |
 | `--no-images` | do not keep the rendered page images |
-| `--resume` / `--overwrite` | continue with the file's settings (keeps finished pages, retries failed ones) / replace the output: all of it, or only the pages of `--page-range` |
+| `--resume` / `--overwrite` | continue with the file's settings (keeps finished pages, retries failed ones) / replace the output: all of it, or only the pages of `--page-range` (typed options then apply to those pages only) |
 
 #### Getting the most accurate text
 

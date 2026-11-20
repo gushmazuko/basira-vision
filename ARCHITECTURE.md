@@ -76,10 +76,13 @@ every page. That gives the resume behavior:
 - the settings that shape the text are recorded in the frontmatter when the
   file is created, and `cli.py` reuses them on `--resume` and on an
   `--overwrite` of only some pages (`_resume_settings`): an option the user
-  did not type comes from the file, a typed one that differs stops the run,
-  so one file is never produced with two configurations. An `--overwrite`
-  of the whole book (no `--page-range`, or one that covers every page)
-  starts a new file and may use new settings;
+  did not type comes from the file. A typed one that differs stops a
+  `--resume`, so a file is never continued with another configuration by
+  accident. On an `--overwrite` of some pages it is a deliberate choice for
+  those pages: it is used, the run warns which settings differ, and the
+  frontmatter keeps the file's own. An `--overwrite` of the whole book (no
+  `--page-range`, or one that covers every page) starts a new file and may
+  use new settings;
 - a model reply that is not a finished one (cut off, blocked, empty with no
   finish reason; `providers/gemini.py::_reply_text`) raises
   `UnfinishedReplyError`, so the page is recorded as failed with the reason
