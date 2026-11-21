@@ -8,66 +8,67 @@ All notable changes to this project are documented here. The format follows
 
 ## [0.2.4] - 2026-11-21
 
-Page-level `--overwrite` now accepts its own settings, and hints are more accurate.
-
-### Changed
-
-- Apply options typed with `ocr --page-range N --overwrite` to the replaced pages instead of stopping when they differ from the file
-- Warn which settings differ in such a run, and keep the file's own settings in the frontmatter
-- Suggest `--overwrite`, not `--resume`, to retry pages that failed in such a run
-- Keep the file's settings in the "start over" hint when only some options are typed
+Single pages can be read again with different settings, and basira gives clearer guidance when something goes wrong.
 
 ### Added
 
-- Read pages with the language prompt through `--custom-prompt ""` when the file was made with a custom prompt
-- Name pages that failed in an earlier run when the current run did not touch them
+- Read chosen pages again with other settings than the rest of the book, for example another prompt: `basira ocr book.pdf --page-range 100 --overwrite --custom-prompt other.txt`
+- Use the built-in prompt for chosen pages of a book made with a custom prompt: `--custom-prompt ""`
+- List the pages that are still failed from an earlier run at the end of `ocr`
+
+### Changed
+
+- Warn when pages are read again with other settings than the rest of the book
+- Keep the book's language, model and other settings in the commands basira suggests after a failed or interrupted run
 
 ### Fixed
 
-- Stop `--resume` and page `--overwrite` when the frontmatter cannot be read, instead of continuing with default settings
-- Report a `--prompts-dir` that does not exist as such on a new run
-- Show an inline `--custom-prompt` as "inline text" in messages, not as a fingerprint
-- Accept finish reasons from a gateway in any letter case
-
-**Upgrading:** a page the model refuses can be read again with another prompt:
-`basira ocr book.pdf --page-range 100 --overwrite --custom-prompt other.txt`
+- Stop with a clear error when the header of the output file is damaged, instead of reading pages with default settings
+- Say that the folder does not exist when `--prompts-dir` is mistyped
+- Stop showing internal codes such as `inline:0618a7` in messages about a custom prompt
+- Recognize a finished reply from gateways that write the finish reason in lowercase
 
 ## [0.2.3] - 2026-11-20
 
-`--overwrite` replaces `--force-restart`, `--resume` keeps the file's settings, and pages the model did not finish are retried.
-
-### Changed
-
-- Continue `--resume` with the settings recorded in the output file instead of the command line's defaults
-- Stop `--resume` when a typed option differs from the file, or when there is no output to continue
-- Stop `--resume` when the recorded prompt file or folder is missing, instead of falling back to the built-in prompt
-- Record the paths of a `--custom-prompt` file and of `--prompts-dir` relative to the output file or under `~/`, so a shared file carries no user name
+Pages the model did not finish are no longer skipped, `--resume` remembers your settings, and single pages can be read again.
 
 ### Added
 
-- Add `--overwrite` in place of `--force-restart` (still accepted): without `--page-range` it starts over, with it it replaces only those pages
-- Record the settings that shape the text in the frontmatter: language, model, prompt, prompts directory, and for `ocr` also `--dpi`, `--strips`, `--media-resolution`, `--thinking-level` and `--image-format`
+- Read chosen pages again without touching the rest of the book: `basira ocr book.pdf --page-range 7-9 --overwrite`
+- Save the settings of a run in the output file: language, model, prompt, `--dpi`, `--strips` and the other OCR options
+
+### Changed
+
+- Continue `--resume` with the settings saved in the output file, so you do not type them again
+- Rename `--force-restart` to `--overwrite`; the old name still works
+- Stop `--resume` when an option you type differs from the saved settings, or when there is nothing to continue
+- Stop `--resume` when the saved prompt file or folder is gone, instead of quietly using the built-in prompt
+- Save prompt paths without your user name, so the output file can be shared
 
 ### Fixed
 
-- Record a page the model did not finish (blocked, cut off at the token limit, or an empty reply) as failed with the reason in its marker, so `--resume` retries it instead of skipping it
-- Fail a translation page when the model returns no text for it
-- Leave such pages out of the five failures in a row that stop a run
-- Continue an interrupted page `--overwrite` with `--overwrite` in the hint, since `--resume` would skip the pages not reached
-- Refuse a `translate` output that would overwrite its own source
-- Replace only the given pages when `--page-range` is used; `--force-restart` deleted the whole file
+- Stop skipping pages the model did not finish (blocked, cut off, or an empty reply): they are marked as failed with the reason, and `--resume` reads them again
+- Mark a translated page as failed when the model returns no text for it
+- Keep reading the book when several pages in a row are blocked by the model, instead of stopping the run
+- Suggest the right command to continue after an interrupted `--page-range N --overwrite`
+- Refuse to translate a file onto itself
+- Keep the rest of the book when `--page-range` is given; `--force-restart` deleted the whole file
 
-**Upgrading:** a page skipped by an earlier version looks like an empty `<!-- Page N -->` block. Read it again with
+**Upgrading:** in files made by earlier versions a skipped page is an empty `<!-- Page N -->` block. Read it again with
 `basira ocr book.pdf --page-range N --overwrite`.
 
 ## [0.2.2] - 2026-11-18
 
 ### Added
 
-- Write `basira_version` into the frontmatter of `ocr` and `translate` outputs; `--resume` keeps the version that started the file
+- Write the basira version that made a file into its header (`basira_version`); `--resume` keeps the version that started the file
 - Document in the README that the model can rarely write its own reasoning into the page text
 
 ## [0.2.1] - 2026-11-14
+
+### Added
+
+- Document accuracy measurements on a Chechen book and advice on the OCR options in the README and docs/benchmark.md
 
 ### Changed
 
@@ -75,17 +76,7 @@ Page-level `--overwrite` now accepts its own settings, and hints are more accura
 - Choose the palochka's case by the spelling rules in the Chechen OCR prompt: Ӏ where a capital belongs, ӏ everywhere else, including digraphs (0.2.0 kept the printed case, which mixed the two)
 - Stop suggesting 600 dpi in the `--dpi` help; use `--strips` for small print
 
-### Added
-
-- Document accuracy measurements on a Chechen book and advice on the OCR options in the README and docs/benchmark.md
-
 ## [0.2.0] - 2026-11-14
-
-### Changed
-
-- Transcribe Chechen verbatim: no spelling corrections or modernization, careful ь/ъ and doubled letters, paragraphs joined and line-end hyphenation removed
-- List Cyrillic І/і among the palochka lookalikes in the Chechen OCR prompt
-- Use a 300 s timeout instead of 120 s for OCR requests with strips or `ultra_high`
 
 ### Added
 
@@ -93,6 +84,12 @@ Page-level `--overwrite` now accepts its own settings, and hints are more accura
 - Add `ocr --thinking-level low|medium|high|xhigh` to set the model's reasoning effort
 - Add `ocr --media-resolution low|medium|high|ultra_high` to set the token budget per image
 - Log the token usage of every page (prompt, thoughts, output) with `-v`
+
+### Changed
+
+- Transcribe Chechen verbatim: no spelling corrections or modernization, careful ь/ъ and doubled letters, paragraphs joined and line-end hyphenation removed
+- List Cyrillic І/і among the palochka lookalikes in the Chechen OCR prompt
+- Use a 300 s timeout instead of 120 s for OCR requests with strips or `ultra_high`
 
 ## [0.1.0] - 2026-11-09
 
