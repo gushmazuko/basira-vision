@@ -6,6 +6,24 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-24
+
+A paper book can be read page by page with a phone camera, and every run now leaves a log file.
+
+### Added
+
+- Read a paper book with a phone: `basira capture mybook --source-language english` shows a QR code and an address; open it on the phone and every photo you take there is read as one page
+- Open a page on the phone to check its photo and read its whole text
+- Retake a page from the phone to replace it, and set the number of the next page to start anywhere or to insert a page you skipped
+- Continue a book by running the same `basira capture` command again: it keeps the book's settings and reads the photos that were not read yet
+- Keep a log of every run next to the file it writes, for example `workspace/mybook/mybook.log`: the command, its settings, every page, retries, failures with their reasons and the tokens used
+- Turn the log file off with `--no-log`
+- Show the tokens a translated page used with `--verbose`
+
+### Changed
+
+- Leave the text of the prompt out of what `--verbose` shows for a translated page; only its length is shown
+
 ## [0.2.4] - 2026-11-21
 
 Single pages can be read again with different settings, and basira gives clearer guidance when something goes wrong.
@@ -111,7 +129,8 @@ First public release.
 - Add custom prompt directories (`--prompts-dir`, `BASIRA_PROMPTS_DIR`)
 - Add Gemini-protocol gateways through `GEMINI_BASE_URL`
 
-[Unreleased]: https://github.com/gushmazuko/basira-vision/compare/v0.2.4...HEAD
+[Unreleased]: https://github.com/gushmazuko/basira-vision/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/gushmazuko/basira-vision/compare/v0.2.4...v0.3.0
 [0.2.4]: https://github.com/gushmazuko/basira-vision/compare/v0.2.3...v0.2.4
 [0.2.3]: https://github.com/gushmazuko/basira-vision/compare/v0.2.2...v0.2.3
 [0.2.2]: https://github.com/gushmazuko/basira-vision/compare/v0.2.1...v0.2.2

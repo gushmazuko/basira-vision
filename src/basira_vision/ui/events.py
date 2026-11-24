@@ -1,7 +1,7 @@
 """Events the pipeline emits. Renderers decide how (and whether) to show them."""
 
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional
+from typing import Dict, Iterator, List, Optional
 
 
 @dataclass
@@ -19,6 +19,27 @@ class RunStarted:
     @property
     def total(self) -> Optional[int]:
         return None if self.pages is None else len(self.pages)
+
+
+@dataclass
+class CaptureStarted(RunStarted):
+    """A capture session starts: pages arrive while it runs, so there is no total.
+
+    ``todo`` are the photos of an earlier session that are read first, ``failed_before`` the
+    pages that failed earlier and have no photo to read again; ``url`` is the address the
+    phone opens.
+    """
+
+    url: str = ""
+    failed_before: Dict[int, str] = field(default_factory=dict)
+
+
+@dataclass
+class PhotoReceived:
+    """A capture session got a photo for a page; ``retake`` when it replaces an earlier one."""
+
+    page: int
+    retake: bool = False
 
 
 @dataclass
@@ -43,6 +64,20 @@ class PageRetrying:
 class PageDone:
     page: int
     seconds: float
+
+
+@dataclass
+class PageRead(PageDone):
+    """A page of a capture session is done; ``preview`` is how its text begins."""
+
+    preview: str = ""
+
+
+@dataclass
+class ReadingStopped:
+    """A capture session stopped reading (rejected key, rate limit, endpoint down); photos are still taken."""
+
+    reason: str
 
 
 @dataclass
@@ -114,3 +149,17 @@ class ErrorReported:
 
     message: str
     hints: List[Hint] = field(default_factory=list)
+
+
+def kinds(event) -> Iterator[type]:
+    """The event's class and the classes it extends, most specific first.
+
+    An event that extends another one (``PageRead`` is a ``PageDone``) is handled as its
+    base wherever a renderer has nothing more specific for it.
+    """
+    return (cls for cls in type(event).__mro__ if cls is not object)
+
+
+def name_of(event) -> str:
+    """The stable name of an event for machine-readable output: that of its base event."""
+    return list(kinds(event))[-1].__name__

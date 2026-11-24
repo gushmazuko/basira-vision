@@ -7,17 +7,22 @@ from datetime import datetime
 from typing import Optional, TextIO
 
 from .events import (
+    CaptureStarted,
     ErrorReported,
     Notice,
     PageDone,
     PageFailed,
     PageRetrying,
     PageStarted,
+    PhotoReceived,
+    ReadingStopped,
     RunFinished,
     RunStarted,
     StepDone,
     StepStarted,
     StopRequested,
+    kinds,
+    name_of,
 )
 from .state import RunState, format_duration, format_pages
 
@@ -42,7 +47,7 @@ class PlainRenderer:
             self.state = RunState(event)
         elif self.state is not None:
             self.state.apply(event)
-        handler = getattr(self, f"_on_{type(event).__name__}", None)
+        handler = next((h for h in (getattr(self, f"_on_{k.__name__}", None) for k in kinds(event)) if h), None)
         if handler:
             handler(event)
 
@@ -52,8 +57,10 @@ class PlainRenderer:
     def _line(self, kind: str, **fields) -> None:
         stamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         body = " ".join(f"{k}={_quote(v)}" for k, v in fields.items() if v is not None and v != "")
-        stream = self.stream or sys.stderr
-        print(f"{stamp} {self.stage} {kind:<7} {body}".rstrip(), file=stream, flush=True)
+        self._out(f"{stamp} {self.stage} {kind:<7} {body}".rstrip())
+
+    def _out(self, text: str) -> None:
+        print(text, file=self.stream or sys.stderr, flush=True)
 
     def _progress(self) -> str:
         return f"{self.state.completed}/{self.state.total}" if self.state and self.state.total else ""
@@ -62,6 +69,17 @@ class PlainRenderer:
         self._line("start", input=event.source, output=event.output, pages=event.total,
                    todo=len(event.todo) if event.pages is not None else None,
                    done_before=len(event.done_before) or None, info=event.details)
+
+    def _on_CaptureStarted(self, event: CaptureStarted) -> None:
+        self._line("start", input=event.source, output=event.output, url=event.url,
+                   todo=len(event.todo) or None, done_before=len(event.done_before) or None, info=event.details)
+
+    def _on_PhotoReceived(self, event: PhotoReceived) -> None:
+        self._line("photo", page=event.page, retake="yes" if event.retake else None)
+
+    def _on_ReadingStopped(self, event: ReadingStopped) -> None:
+        self._line("warning", msg=f"reading stopped: {event.reason}",
+                   hint="photos taken from now on are kept; fix the cause and run the command again")
 
     def _on_PageStarted(self, event: PageStarted) -> None:
         pass
@@ -112,7 +130,7 @@ class JsonRenderer:
         self.stream = stream
 
     def emit(self, event) -> None:
-        name = "".join(f"_{c.lower()}" if c.isupper() else c for c in type(event).__name__).lstrip("_")
+        name = "".join(f"_{c.lower()}" if c.isupper() else c for c in name_of(event)).lstrip("_")
         record = {"time": datetime.now().isoformat(timespec="seconds"), "stage": self.stage, "event": name}
         payload = asdict(event)
         if "failed" in payload:

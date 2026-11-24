@@ -60,7 +60,7 @@ def provider(monkeypatch, tmp_path):
     fake = FakeProvider()
     monkeypatch.chdir(tmp_path)  # no stray .env, outputs land in tmp_path/workspace
     monkeypatch.setenv("GEMINI_API_KEY", "test-key")
-    for var in ("GEMINI_BASE_URL", "BASIRA_OUTPUT_DIR", "BASIRA_PROMPTS_DIR"):
+    for var in ("GEMINI_BASE_URL", "GEMINI_MODEL", "BASIRA_OUTPUT_DIR", "BASIRA_PROMPTS_DIR"):
         monkeypatch.delenv(var, raising=False)
     fake.models = []
     monkeypatch.setattr(cli, "create_provider", lambda **kwargs: fake.models.append(kwargs["model_name"]) or fake)

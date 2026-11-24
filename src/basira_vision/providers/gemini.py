@@ -85,6 +85,14 @@ def _reply_text(response: Any, blank_ok: bool) -> str:
     raise UnfinishedReplyError("empty reply" + ("" if reason else " (no finish reason)"))
 
 
+def _log_usage(what: str, response: Any) -> None:
+    """Tokens a request used, for the log file (info: kept there, shown on a terminal only with --verbose)."""
+    usage = getattr(response, "usage_metadata", None)
+    if usage:
+        logger.info(f"usage {what}: prompt={usage.prompt_token_count} "
+                    f"thoughts={usage.thoughts_token_count} output={usage.candidates_token_count}")
+
+
 def _is_retryable_code(code: Any) -> bool:
     """Only request timeouts, rate limits and server errors are worth retrying."""
     if not isinstance(code, int):
@@ -259,17 +267,15 @@ class GeminiProvider(VisionProvider):
         heavy = strips > 0 or media_resolution == "ultra_high"
         response = self._generate_with_retry([prompt, *images], _HEAVY_REQUEST_TIMEOUT_S if heavy else None,
                                              thinking_level)
-        usage = getattr(response, "usage_metadata", None)
-        if usage:
-            logger.debug(f"usage {image_path.name}: prompt={usage.prompt_token_count} "
-                         f"thoughts={usage.thoughts_token_count} output={usage.candidates_token_count}")
+        _log_usage(image_path.name, response)
         return _reply_text(response, blank_ok=True)
 
     @handle_provider_error
     def generate_text(self, prompt: str) -> str:
         """Send a text-only prompt."""
-        logger.debug(f"Prompt ({len(prompt)} chars): {prompt[:500]}{'...' if len(prompt) > 500 else ''}")
+        logger.debug(f"Prompt: {len(prompt)} chars")  # not its text: the page is in it, and logs are kept
         response = self._generate_with_retry(prompt)
+        _log_usage("text", response)
         return _reply_text(response, blank_ok=False)
 
     def check_connection(self) -> Optional[str]:

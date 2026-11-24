@@ -6,6 +6,7 @@ reporter, so they appear in the same place and format as everything else.
 """
 
 import logging
+import threading
 from contextlib import contextmanager
 from typing import Callable, Iterator
 
@@ -23,12 +24,12 @@ class _SinkHandler(logging.Handler):
     def __init__(self, sink: Sink):
         super().__init__(logging.DEBUG)
         self.sink = sink
-        self._busy = False
+        self._busy = threading.local()  # per thread: one thread's record must not drop another's
 
     def emit(self, record: logging.LogRecord) -> None:
-        if self._busy:  # a renderer that logs must not recurse
+        if getattr(self._busy, "now", False):  # a renderer that logs must not recurse
             return
-        self._busy = True
+        self._busy.now = True
         try:
             if record.levelno >= logging.WARNING:
                 level = "warning"
@@ -36,16 +37,19 @@ class _SinkHandler(logging.Handler):
                 level = "info"
             else:
                 level = "debug"
-            self.sink(level, record.getMessage())
+            message = record.getMessage()
+            if record.exc_info and record.exc_info[1] is not None:  # one line: what, not the traceback
+                message += f": {type(record.exc_info[1]).__name__}: {record.exc_info[1]}"
+            self.sink(level, message)
         except Exception:
             self.handleError(record)
         finally:
-            self._busy = False
+            self._busy.now = False
 
 
 @contextmanager
-def route_logging(sink: Sink, verbose: bool = False) -> Iterator[None]:
-    """Send package logs (debug with --verbose) and third-party warnings to ``sink``."""
+def route_logging(sink: Sink, level: int = logging.WARNING) -> Iterator[None]:
+    """Send package logs from ``level`` up and third-party warnings to ``sink``."""
     root = logging.getLogger()
     package = logging.getLogger(LOGGER_NAME)
     saved = (root.level, package.level, package.propagate)
@@ -53,7 +57,7 @@ def route_logging(sink: Sink, verbose: bool = False) -> Iterator[None]:
 
     root.addHandler(handler)
     root.setLevel(logging.WARNING)
-    package.setLevel(logging.DEBUG if verbose else logging.WARNING)
+    package.setLevel(level)
     package.propagate = True
     try:
         yield

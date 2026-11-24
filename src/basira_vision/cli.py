@@ -1,23 +1,28 @@
-"""Command-line interface: ``basira ocr | translate | typst``."""
+"""Command-line interface: ``basira ocr | capture | translate | typst``."""
 
 import functools
 import hashlib
 import os
 import shlex
 import shutil
+import signal
+import socket
 import sys
 import tempfile
+import threading
 import time
+from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
+from typing import Any, Callable, Dict, Iterable, Iterator, List, Optional, Tuple
 
 import click
 import pymupdf
 from click.core import ParameterSource
 
 from . import __version__
-from .pipeline import PageTask, RunResult, run_pages
+from .capture import CaptureServer, CaptureSession, local_address, new_key
+from .pipeline import GracefulInterrupt, PageTask, RunResult, run_pages
 from .processing import typst_processor
 from .processing.pdf_converter import IMAGE_FORMATS, PDFRenderer, page_count, parse_page_range
 from .processing.prompt_loader import BUILTIN_PROMPTS_DIR, PromptLoader, read_custom_prompt
@@ -30,8 +35,8 @@ from .processing.translation import (
 from .providers import VisionProvider, create_provider
 from .providers.gemini import MEDIA_RESOLUTIONS, THINKING_LEVELS
 from .settings import Settings
-from .ui import LOG_FORMATS, Hint, Reporter, display_path, print_result_path
-from .ui.events import RunFinished, RunStarted, StepDone, StepStarted
+from .ui import LOG_FORMATS, Hint, Journal, Reporter, display_path, print_result_path
+from .ui.events import CaptureStarted, RunFinished, RunStarted, StepDone, StepStarted, StopRequested
 from .ui.state import pages_label
 from .utils.constants import DEFAULT_TARGET_LANGUAGE, SeparatorType
 from .utils.errors import AuthenticationError, BasiraError, ConfigurationError, EndpointUnreachableError
@@ -69,16 +74,47 @@ def _option(flag: str, value, default=None) -> list:
     return [flag, value] if value is not None and value != default else []
 
 
-def _command(stage: str):
-    """Shared options, the reporter's lifetime, error display and the exit code."""
+def _typed_command() -> str:
+    """The command as it was typed, for the first line of the log: ``basira ocr book.pdf --strips 3``.
+
+    Built from what click parsed, not from sys.argv: the program may have been started as
+    ``python -m basira_vision``. Prompt text given on the command line is left out.
+    """
+    ctx = click.get_current_context()
+    names, level = [], ctx
+    while level.parent is not None:
+        names.append(level.info_name)
+        level = level.parent
+    args: List[Any] = names[::-1]
+    for param in ctx.command.params:
+        if ctx.get_parameter_source(param.name) != ParameterSource.COMMANDLINE:
+            continue
+        value = ctx.params.get(param.name)
+        if isinstance(param, click.Argument):
+            args.append(value)
+            continue
+        flag = max(param.opts, key=len)
+        if param.is_flag:
+            args += [flag] if value else [max(param.secondary_opts, key=len)] if param.secondary_opts else []
+        elif param.name == "custom_prompt" and value:
+            args += [flag, _prompt_file(value) or Placeholder("<text>")]
+        else:
+            for item in value if isinstance(value, (tuple, list)) else [value]:
+                args += [flag, item]
+    return command_line(*args)
+
+
+def _command(stage: str, log: bool = True):
+    """Shared options, the reporter's lifetime, error display and the exit code.
+
+    ``log``: the command writes something a log can be kept next to (``Reporter.log_to``).
+    """
 
     def decorate(func):
-        @click.option("--log-format", type=click.Choice(LOG_FORMATS), default="auto", show_default=True,
-                      help="auto: live view in a terminal, plain lines otherwise; json: one event per line")
-        @click.option("--verbose", "-v", is_flag=True, help="Show debug details")
         @functools.wraps(func)
-        def wrapper(log_format, verbose, **kwargs):
-            with Reporter(stage, log_format, verbose) as reporter:
+        def wrapper(log_format, verbose, no_log=True, **kwargs):
+            journal = None if no_log else Journal(stage, __version__, _typed_command())
+            with Reporter(stage, log_format, verbose, journal) as reporter:
                 try:
                     code = func(reporter, **kwargs)
                 except CommandError as e:
@@ -90,9 +126,20 @@ def _command(stage: str):
                 except KeyboardInterrupt:
                     reporter.error("interrupted before any page was processed")
                     code = 130
+                except (click.ClickException, click.exceptions.Exit, click.Abort):
+                    raise  # click's own way of ending a command
+                except Exception as e:
+                    reporter.crashed(e)
+                    raise
             sys.exit(code or 0)
 
-        return wrapper
+        wrapper = click.option("--verbose", "-v", is_flag=True, help="Show debug details")(wrapper)
+        if log:
+            wrapper = click.option("--no-log", is_flag=True,
+                                   help="Do not keep a log file (<output>.log) next to the output")(wrapper)
+        return click.option("--log-format", type=click.Choice(LOG_FORMATS), default="auto", show_default=True,
+                            help="What the terminal shows. auto: live view in a terminal, plain lines "
+                                 "otherwise; json: one event per line")(wrapper)
 
     return decorate
 
@@ -105,6 +152,19 @@ def _overwrite_options(what: str):
         return click.option("--overwrite", is_flag=True, help=what)(func)
 
     return decorate
+
+
+@contextmanager
+def _shielded() -> Iterator[None]:
+    """Ctrl-C does nothing in here, except where a GracefulInterrupt inside takes it over."""
+    if threading.current_thread() is not threading.main_thread():
+        yield
+        return
+    previous = signal.signal(signal.SIGINT, lambda signum, frame: None)
+    try:
+        yield
+    finally:
+        signal.signal(signal.SIGINT, previous)
 
 
 def _check_mode(resume: bool, overwrite: bool, force_restart: bool) -> bool:
@@ -158,6 +218,8 @@ _OCR_SETTINGS = {
     "thinking_level": "thinking_level",
     "image_format": "image_format",
 }
+# A photo has no render resolution and is always saved as JPEG.
+_CAPTURE_SETTINGS = {key: option for key, option in _OCR_SETTINGS.items() if key not in ("dpi", "image_format")}
 _TRANSLATE_SETTINGS = {
     "target_language": "target_language",
     "ai_model": "model",
@@ -165,6 +227,7 @@ _TRANSLATE_SETTINGS = {
     "prompts_dir": "prompts_dir",
 }
 _INLINE_PROMPT = "inline:"
+_START_OVER = "start over with --overwrite (all pages)"
 
 
 def _as_text(value: Any) -> str:
@@ -242,14 +305,19 @@ def _recorded_prompt(custom_prompt: Optional[str], output_path: Path) -> Optiona
     """A --custom-prompt as recorded: its file path, or a fingerprint of inline text."""
     if not custom_prompt:
         return None
-    path = Path(custom_prompt).expanduser()
-    try:
-        is_file = path.is_file()
-    except OSError:  # long prompt text is not a valid file name
-        is_file = False
-    if is_file:
+    path = _prompt_file(custom_prompt)
+    if path is not None:
         return _recorded_path(path, output_path)
     return _INLINE_PROMPT + hashlib.sha256(custom_prompt.encode("utf-8")).hexdigest()[:16]
+
+
+def _prompt_file(custom_prompt: str) -> Optional[Path]:
+    """The file a --custom-prompt names, or None when it is the prompt text itself."""
+    path = Path(custom_prompt).expanduser()
+    try:
+        return path if path.is_file() else None
+    except OSError:  # long prompt text is not a valid file name
+        return None
 
 
 def _stored_path(value: Optional[str], output_path: Path) -> Optional[Path]:
@@ -263,7 +331,8 @@ def _stored_path(value: Optional[str], output_path: Path) -> Optional[Path]:
 
 def _resume_settings(output_path: Path, current: Dict[str, Any], options: Dict[str, str],
                      continue_command: List, restart_command: Callable[[Dict[str, Any], Iterable[str]], List],
-                     typed_wins: bool = False) -> Tuple[Dict[str, Any], Dict[str, str]]:
+                     typed_wins: bool = False, start_over: Optional[str] = None,
+                     ) -> Tuple[Dict[str, Any], Dict[str, str]]:
     """The settings a --resume (or an --overwrite of some pages) continues with.
 
     Each setting recorded in the file wins over the default. One typed on the command line
@@ -274,13 +343,16 @@ def _resume_settings(output_path: Path, current: Dict[str, Any], options: Dict[s
 
     ``restart_command(settings, typed)`` builds the command that starts over: the file's
     settings with the typed ones on top, so starting over changes only what the user asked for.
+
+    ``start_over``: for a command that continues an existing file by itself and has no
+    --resume and --overwrite (capture), the words that say how to start over instead.
     """
     meta, raw, _ = split_frontmatter(output_path.read_text(encoding="utf-8"))
     if raw.strip() and not meta:
         # Going on would read the pages with the built-in defaults instead of the file's settings.
         raise CommandError(
             f"{display_path(output_path)} has a frontmatter that cannot be read. Nothing was changed.",
-            [Hint("fix", "correct the frontmatter, or start over with --overwrite (all pages)")],
+            [Hint("fix", f"correct the frontmatter, or {start_over or _START_OVER}")],
         )
     resolved = dict(current)
     conflicts: Dict[str, str] = {}
@@ -293,23 +365,26 @@ def _resume_settings(output_path: Path, current: Dict[str, Any], options: Dict[s
             raise CommandError(
                 f"{display_path(output_path)} has an invalid {key} in its frontmatter: {meta[key]!r}. "
                 "Nothing was changed.",
-                [Hint("fix", "correct the value in the frontmatter, or start over with --overwrite (all pages)")],
+                [Hint("fix", f"correct the value in the frontmatter, or {start_over or _START_OVER}")],
             ) from None
         if _typed(option) and current[key] != stored:
             conflicts[key] = _difference(option, key, current[key], stored)
         else:
             resolved[key] = stored
     if conflicts and not typed_wins:
-        raise CommandError(
-            f"{display_path(output_path)} was made with other settings ({'; '.join(conflicts.values())}). "
-            "Nothing was changed.",
-            [
+        if start_over:
+            hints = [Hint("continue", command_line(*continue_command), command=True, note="with the file's settings"),
+                     Hint("restart", start_over, note="with the new settings")]
+        else:
+            hints = [
                 Hint("continue", command_line(*continue_command, "--resume"), command=True,
                      note="with the file's settings"),
                 Hint("restart", command_line(*_without_range(restart_command(resolved, conflicts)), "--overwrite"),
                      command=True, note="deletes the file and starts over with the new settings"),
-            ],
-        )
+            ]
+        raise CommandError(
+            f"{display_path(output_path)} was made with other settings ({'; '.join(conflicts.values())}). "
+            "Nothing was changed.", hints)
     return resolved, conflicts
 
 
@@ -352,7 +427,8 @@ def _require_resumable(output_path: Path, resume: bool, others: Iterable[Path] =
 
 
 def _load_prompt(stage: str, values: Dict[str, Any], custom_prompt: Optional[str],
-                 output_path: Path, mode: str = "--resume", from_file: bool = True) -> tuple:
+                 output_path: Path, mode: str = "--resume", from_file: bool = True,
+                 start_over: Optional[str] = None) -> tuple:
     """Load the prompt the settings name; return (text, label, --custom-prompt value for hints).
 
     ``from_file``: the prompt directory is the one recorded in the output file (a continued
@@ -368,7 +444,7 @@ def _load_prompt(stage: str, values: Dict[str, Any], custom_prompt: Optional[str
                                    [Hint("check", "--prompts-dir, or BASIRA_PROMPTS_DIR in the environment")])
             raise CommandError(f"the prompt directory of {display_path(output_path)} is missing: "
                                f"{display_path(prompts_dir)}",
-                               [Hint("continue", "restore it, or start over with --overwrite (all pages)")])
+                               [Hint("continue", f"restore it, or {start_over or _START_OVER}")])
         return PromptLoader(prompts_dir).load(stage, language), f"{stage}/{language}", None
     if custom_prompt:  # typed, and the same as recorded when resuming
         return read_custom_prompt(custom_prompt), "custom", custom_prompt
@@ -376,12 +452,12 @@ def _load_prompt(stage: str, values: Dict[str, Any], custom_prompt: Optional[str
         raise CommandError(
             f"{display_path(output_path)} was made with a --custom-prompt given as text. "
             "Nothing was changed.",
-            [Hint("continue", f"pass the same --custom-prompt text again with {mode}")],
+            [Hint("continue", "pass the same --custom-prompt text again" + (f" with {mode}" if mode else ""))],
         )
     path = _stored_path(recorded, output_path)
     if not path.is_file():
         raise CommandError(f"the prompt file of {display_path(output_path)} is missing: {display_path(path)}",
-                           [Hint("continue", "restore it at that path, or start over with --overwrite (all pages)")])
+                           [Hint("continue", f"restore it at that path, or {start_over or _START_OVER}")])
     return read_custom_prompt(str(path)), "custom", path
 
 
@@ -520,6 +596,9 @@ def main():
     3. review workspace/book/book_russian.md, then:
        basira typst workspace/book/book_russian.md --title "..." --author "..."
 
+    A paper book and no scan? basira capture NAME reads its pages from a
+    phone camera into the same markdown as step 1.
+
     Configuration comes from the environment or a .env file:
     GEMINI_API_KEY (required), GEMINI_MODEL, GEMINI_BASE_URL,
     BASIRA_OUTPUT_DIR, BASIRA_PROMPTS_DIR.
@@ -575,6 +654,7 @@ def ocr(reporter, pdf_file, source_language, page_range, dpi, strips, media_reso
 
     document_dir = settings.workspace_dir(output_dir) / pdf_file.stem
     output_path = document_dir / f"{pdf_file.stem}.md"
+    reporter.log_to(output_path)
     base = ["ocr", pdf_file, *_option("--page-range", page_range), *_option("--output-dir", output_dir),
             *(["--no-images"] if no_images else [])]
     run_settings = {
@@ -652,6 +732,7 @@ def ocr(reporter, pdf_file, source_language, page_range, dpi, strips, media_reso
         },
         resume=keep_file,
     )
+    reporter.start_log()
     completed = page_file.completed()
     todo = list(requested) if overwrite else [n for n in requested if n not in completed]
 
@@ -727,6 +808,219 @@ def ocr(reporter, pdf_file, source_language, page_range, dpi, strips, media_reso
     return _finish(reporter, "ocr", result, page_file, total, hints)
 
 
+# ---------------------------------------------------------------------------- capture
+
+
+def _book_name(ctx, param, value: str) -> str:
+    name = value.strip()
+    # A name that starts with "-" could not be typed again: the next command would read it as an option.
+    if not name or name[0] in ".-" or "/" in name or "\\" in name or not name.isprintable():
+        raise click.BadParameter("give the book a plain name without folders; "
+                                 "it becomes <workspace>/<name>/<name>.md")
+    return name
+
+
+@main.command()
+@click.argument("name", callback=_book_name)
+@click.option("--source-language", default="english", show_default=True,
+              help="OCR prompt template, named after the language of the book")
+@click.option("--strips", type=click.IntRange(0, 8), default=0, show_default=True,
+              help="Also send N overlapping full-resolution strips of each photo in the same request")
+@click.option("--media-resolution", type=click.Choice(MEDIA_RESOLUTIONS, case_sensitive=False),
+              help="Token budget per image (model default if not set)")
+@click.option("--thinking-level", type=click.Choice(THINKING_LEVELS, case_sensitive=False),
+              help="Reasoning effort (model default if not set)")
+@click.option("--model", "-m", help="Model name (overrides GEMINI_MODEL)")
+@click.option("--custom-prompt", help="OCR prompt text, or a path to a prompt file")
+@click.option("--prompts-dir", type=click.Path(file_okay=False, path_type=Path),
+              help="Extra prompt directory searched before the built-in one (env: BASIRA_PROMPTS_DIR)")
+@click.option("--output-dir", type=click.Path(file_okay=False, path_type=Path),
+              help="Workspace directory (default: ./workspace, env: BASIRA_OUTPUT_DIR)")
+@click.option("--host", default="0.0.0.0", show_default=True,
+              help="Address to listen on; the default accepts phones on the local network")
+@click.option("--port", type=click.IntRange(0, 65535), default=8765, show_default=True,
+              help="Port to listen on (0: any free port)")
+@_command("capture")
+def capture(reporter, name, source_language, strips, media_resolution, thinking_level, model, custom_prompt,
+            prompts_dir, output_dir, host, port):
+    """Read the pages of a paper book from a phone camera.
+
+    Shows a QR code and an address to open on a phone that is on the same
+    network. Every photo taken there is one page: it is uploaded, read like ocr reads a
+    scanned page, and written to <workspace>/<name>/<name>.md.
+
+    Run the same command again to continue a book. Ctrl-C ends the session.
+    """
+    settings = Settings()
+    document_dir = settings.workspace_dir(output_dir) / name
+    output_path = document_dir / f"{name}.md"
+    images_dir = document_dir / "images"
+    reporter.log_to(output_path)
+    base = ["capture", name, *_option("--output-dir", output_dir), *_option("--host", host, "0.0.0.0"),
+            *_option("--port", port, 8765)]
+    run_settings = {
+        "source_language": source_language.strip().lower(),
+        "ai_model": model or settings.gemini_model,
+        "custom_prompt": _recorded_prompt(custom_prompt, output_path),
+        "prompts_dir": _recorded_path(prompts_dir or settings.prompts_dir, output_path),
+        "strips": strips,
+        "media_resolution": media_resolution and media_resolution.lower(),
+        "thinking_level": thinking_level and thinking_level.lower(),
+    }
+
+    # An existing book is continued, with its own settings: there is no --resume to type.
+    continued = output_path.exists()
+    start_over = (f"delete {display_path(output_path)} and run the command again "
+                  "(the photos are kept and read again)")
+    rerun = [*base, *_inline_prompt_option(run_settings, custom_prompt)]
+    keep_incomplete = False
+    if continued:
+        meta, raw, body = split_frontmatter(output_path.read_text(encoding="utf-8"))
+        # A header that cannot be read at all gets its own message from _resume_settings.
+        if (meta or not raw.strip()) and ("target_language" in meta or "source_language" not in meta):
+            raise CommandError(
+                f"{display_path(output_path)} exists and is not a book read by basira ocr or capture. "
+                "Nothing was changed.",
+                [Hint("try", "another name for the book, or move the file away")])
+        # A book that ocr left incomplete may lack pages of its PDF, which only ocr can tell:
+        # a capture session does not turn it into a complete one.
+        keep_incomplete = "dpi" in meta and meta.get("processing_status") == "Incomplete"
+        if meta and not body.strip() and not any(images_dir.glob("page_*")):
+            # A session that ended before its first photo left only the header: nothing is
+            # continued, so the options typed now are the book's.
+            continued = False
+    if continued:
+        # A typed inline prompt that is not the book's must not come back in the way on.
+        same_prompt = meta.get("custom_prompt") == run_settings["custom_prompt"]
+        run_settings, _ = _resume_settings(output_path, run_settings, _CAPTURE_SETTINGS,
+                                           rerun if same_prompt else base, None, start_over=start_over)
+        rerun = [*base, *_inline_prompt_option(run_settings, custom_prompt)]
+    prompt, prompt_label, _ = _load_prompt("ocr", run_settings, custom_prompt, output_path, "",
+                                           from_file=continued and not _typed("prompts_dir"),
+                                           start_over=start_over)
+    model_name, strips = run_settings["ai_model"], run_settings["strips"]
+    media_resolution, thinking_level = run_settings["media_resolution"], run_settings["thinking_level"]
+
+    provider = _connect(settings, model_name, reporter)
+    try:
+        server = CaptureServer(None, host, port, new_key())
+    except OSError as e:
+        raise CommandError(f"cannot listen on {host}:{port}: {e.strerror or e}",
+                           [Hint("try", "another port with --port, or --port 0 for any free one")]) from None
+
+    def run_session() -> int:
+        started = time.monotonic()
+        session: Optional[CaptureSession] = None
+        try:
+            # From here on a Ctrl-C ends the session in order, also one that comes before the first photo.
+            # The signal handler only raises a flag: it runs on this thread, in the middle of whatever
+            # this thread was doing, so it must not take a lock (the session's, the console's).
+            with GracefulInterrupt(lambda: None) as interrupt:
+                page_file = PageFile(
+                    output_path,
+                    SeparatorType.OCR,
+                    {
+                        "title": "",
+                        "author": "",
+                        "source_language": run_settings["source_language"],
+                        "ai_provider": PROVIDER_NAME,
+                        "ai_model": model_name,
+                        "basira_version": __version__,
+                        **{key: run_settings[key] for key in _CAPTURE_SETTINGS
+                           if key not in ("source_language", "ai_model")},
+                        "generated": _now(),
+                        "processing_status": "In progress",
+                    },
+                    resume=continued,
+                )
+                reporter.start_log()
+                if continued:
+                    page_file.set_field("processing_status", "In progress")
+                session = CaptureSession(
+                    page_file, images_dir,
+                    lambda image: provider.extract_text(image, prompt, strips, media_resolution, thinking_level),
+                    reporter.emit,
+                )
+                provider.on_retry = session.on_retry
+
+                done_before, to_read = sorted(page_file.completed()), session.unread()
+                details = []
+                if done_before:
+                    details.append(f"{len(done_before)} done earlier")
+                if to_read:
+                    details.append(f"{len(to_read)} to read")
+                details += [f"prompt {prompt_label}", _model_details(settings, model_name, provider)]
+                if strips:
+                    details.append(f"page + {strips} strips")
+                if media_resolution:
+                    details.append(f"media resolution {media_resolution}")
+                if thinking_level:
+                    details.append(f"thinking {thinking_level}")
+                address = host if host not in ("0.0.0.0", "") else (local_address() or socket.gethostname())
+                no_photo = {n: reason for n, reason in page_file.failed().items() if n not in to_read}
+                reporter.emit(CaptureStarted("capture", "phone camera", display_path(output_path), " · ".join(details),
+                                             todo=to_read, done_before=done_before,
+                                             url=f"http://{address}:{server.port}/{server.key}/",
+                                             failed_before=no_photo))
+                server.session = session
+                if not interrupt.requested:
+                    server.start()
+                    session.start()
+                while not interrupt.requested:
+                    time.sleep(0.1)
+                reading = session.reading
+                if reading is not None:
+                    reporter.emit(StopRequested(reading))
+                session.close()  # no more photos are taken; the page being read finishes
+        except KeyboardInterrupt:  # a second Ctrl-C: do not wait for the page being read
+            if session is not None:
+                session.abort()
+        finally:
+            provider.on_retry = None
+            server.close()
+        if session is None:  # interrupted before there was a session
+            raise KeyboardInterrupt
+
+        session.finish(keep_incomplete)
+        unread, failed, completed = session.unread(), page_file.failed(), page_file.completed()
+        result = RunResult("done", done=completed, failed=failed, elapsed=time.monotonic() - started,
+                           retries=session.retries)
+        hints = []
+        not_read = f"reads {pages_label(unread)}, not read yet" if unread else ""
+        if session.stopped:
+            result.outcome, result.reason = "stopped", session.stopped
+            hints.append(Hint("continue", command_line(*rerun), command=True,
+                              note="; ".join(x for x in ("once the cause is fixed", not_read) if x)))
+        elif unread:
+            result.outcome = "paused"
+            hints.append(Hint("continue", command_line(*rerun), command=True, note=not_read))
+        elif failed:
+            # Running again reads a failed page from its photo; one without a photo can only be retaken.
+            with_photo = [n for n in sorted(failed) if n in session.photos()]
+            without = [n for n in sorted(failed) if n not in with_photo]
+            if with_photo:
+                it = "it" if len(with_photo) == 1 else "them"
+                hints.append(Hint("retry", command_line(*rerun), command=True,
+                                  note=f"reads {pages_label(with_photo)} again, or retake {it} from the phone"))
+            if without:
+                it, has = ("it", "has") if len(without) == 1 else ("them", "have")
+                hints.append(Hint("retake", f"{pages_label(without)} {has} no photo",
+                                  note=f"retake {it} from the phone"))
+        hints.append(Hint("output", display_path(output_path)))
+        if images_dir.is_dir():
+            hints.append(Hint("images", display_path(images_dir)))
+        if result.outcome == "done" and completed and not failed and not keep_incomplete:
+            next_step = command_line("translate", output_path, "--target-language", Placeholder("<language>"))
+            hints.append(Hint("next", next_step, command=True, note="after reviewing the markdown"))
+        # A failed page whose photo waits to be read again is one page, not two.
+        return _finish(reporter, "capture", result, page_file, len(set(page_file.pages) | set(unread)), hints)
+
+    # A Ctrl-C that comes while the session is already ending (the server closing, the summary)
+    # must not cut the ending short: it would leave no summary and a status of "In progress".
+    with _shielded():
+        return run_session()
+
+
 # ---------------------------------------------------------------------------- translate
 
 
@@ -766,6 +1060,7 @@ def translate(reporter, markdown_file, target_language, model, custom_prompt, pr
     if output_path.resolve() == markdown_file.resolve():
         raise CommandError(f"the translation would overwrite its source {display_path(markdown_file)}",
                            [Hint("choose", "another --target-language, or an output file with -o")])
+    reporter.log_to(output_path)
     # Without -o the output file is named after the target language, so it is part of where to look.
     base = ["translate", markdown_file, *([] if output else ["--target-language", target_language]),
             *_option("--output", output)]
@@ -832,6 +1127,7 @@ def translate(reporter, markdown_file, target_language, model, custom_prompt, pr
         },
         resume=resume,
     )
+    reporter.start_log()
     completed = page_file.completed()
     todo = [i for i, page in enumerate(pages) if page.number not in completed]
 
@@ -914,6 +1210,8 @@ def typst(reporter, markdown_file, title, author, translator_preface, toc, templ
 
     Title and author come from the YAML frontmatter unless given here.
     """
+    output_path = output or markdown_file.with_suffix(".pdf")
+    reporter.log_to(output_path)
     missing_tools = typst_processor.missing_tools()
     if missing_tools:
         raise CommandError(f"{' and '.join(missing_tools)} not found on PATH", [
@@ -934,7 +1232,6 @@ def typst(reporter, markdown_file, title, author, translator_preface, toc, templ
                                          "--author", Placeholder('"..."')), command=True),
         ])
 
-    output_path = output or markdown_file.with_suffix(".pdf")
     template_name = display_path(template) if template else "A5 template"
     details = [metadata["title"], ", ".join(metadata["authors"]), metadata["lang"] or "en", template_name]
     reporter.emit(RunStarted("typst", display_path(markdown_file), display_path(output_path), " · ".join(details)))
@@ -952,6 +1249,8 @@ def typst(reporter, markdown_file, title, author, translator_preface, toc, templ
         reporter.warn("the file is marked Incomplete, so some pages may be missing from the book")
 
     started = time.monotonic()
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    reporter.start_log()
 
     def on_step(name: str, seconds: Optional[float]) -> None:
         reporter.emit(StepStarted(name) if seconds is None else StepDone(name, seconds))
@@ -993,7 +1292,7 @@ def export():
 @click.argument("destination", required=False, default="template.typ",
                 type=click.Path(dir_okay=False, path_type=Path))
 @click.option("--force", is_flag=True, help="Overwrite the file if it exists")
-@_command("export")
+@_command("export", log=False)
 def export_template(reporter, destination, force):
     """Copy the book template to DESTINATION (default: ./template.typ).
 
@@ -1017,7 +1316,7 @@ def export_template(reporter, destination, force):
 @click.argument("destination", required=False, default="prompts",
                 type=click.Path(file_okay=False, path_type=Path))
 @click.option("--force", is_flag=True, help="Overwrite prompt files that already exist")
-@_command("export")
+@_command("export", log=False)
 def export_prompts(reporter, destination, force):
     """Copy all OCR and translation prompts to DESTINATION (default: ./prompts).
 

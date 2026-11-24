@@ -263,3 +263,23 @@ def test_finish_reasons_are_read_in_any_case(monkeypatch, page_image):
     cut = SimpleNamespace(text="half", candidates=[SimpleNamespace(finish_reason="max_tokens")])
     with pytest.raises(UnfinishedReplyError, match="MAX_TOKENS"):
         provider_with([cut], monkeypatch).extract_text(page_image, "read")
+
+
+def test_token_usage_is_logged_for_the_log_file_and_a_prompt_never_with_its_text(monkeypatch, page_image, caplog):
+    def with_usage(text):
+        response = reply(text)
+        response.usage_metadata = SimpleNamespace(prompt_token_count=1200, thoughts_token_count=30,
+                                                  candidates_token_count=450)
+        return response
+
+    provider = provider_with([with_usage("page text"), with_usage("translated")], monkeypatch)
+    with caplog.at_level("DEBUG", logger="basira_vision"):
+        provider.extract_text(page_image, "read the page")
+        provider.generate_text("Translate this: THE TEXT OF THE PAGE")
+    records = [(record.levelname, record.getMessage()) for record in caplog.records
+               if record.name.endswith("gemini") and "Initialized" not in record.getMessage()]
+    assert records == [
+        ("INFO", f"usage {page_image.name}: prompt=1200 thoughts=30 output=450"),
+        ("DEBUG", "Prompt: 36 chars"),
+        ("INFO", "usage text: prompt=1200 thoughts=30 output=450"),
+    ]

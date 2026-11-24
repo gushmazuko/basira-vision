@@ -1,0 +1,810 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<title>basira capture</title>
+<style>
+  :root {
+    --paper: #f6f3ec;
+    --card: #fffdf8;
+    --ink: #1f1c17;
+    --muted: #6d665a;
+    --line: #dfd8ca;
+    --accent: #1f5f4a;
+    --accent-ink: #ffffff;
+    --busy: #8a5a00;
+    --busy-bg: #f6e7c4;
+    --bad: #a3261c;
+    --bad-bg: #f7ddd8;
+    --good: #1f5f4a;
+    --good-bg: #dcebe3;
+    --thumb: #e8e2d5;
+    --bar-height: 92px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper: #16150f;
+      --card: #201e17;
+      --ink: #ece7db;
+      --muted: #a39b8b;
+      --line: #37342a;
+      --accent: #5fbf9c;
+      --accent-ink: #0d1a15;
+      --busy: #e6bd62;
+      --busy-bg: #3a2f14;
+      --bad: #f0958a;
+      --bad-bg: #40201c;
+      --good: #7fd1b2;
+      --good-bg: #1b3329;
+      --thumb: #2b2920;
+    }
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font: 16px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  }
+  body.viewing { overflow: hidden; }
+  button { font: inherit; color: inherit; cursor: pointer; touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+  :focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+  [hidden] { display: none !important; }
+
+  main {
+    max-width: 34rem;
+    margin: 0 auto;
+    padding: 16px 16px calc(var(--bar-height) + 24px + env(safe-area-inset-bottom));
+  }
+  header { margin-bottom: 12px; }
+  h1 { font-size: 1.2rem; margin: 0 0 8px; overflow-wrap: anywhere; }
+  #summary { display: flex; flex-wrap: wrap; gap: 6px; min-height: 30px; }
+  .chip {
+    font-size: 0.85rem;
+    font-weight: 600;
+    border-radius: 999px;
+    padding: 4px 12px;
+    border: 1px solid var(--line);
+    background: var(--card);
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+  .chip.busy { background: var(--busy-bg); color: var(--busy); border-color: transparent; }
+  button.chip.failed { background: var(--bad-bg); color: var(--bad); border-color: transparent; min-height: 30px; }
+  button.chip.failed[aria-pressed="true"] { box-shadow: inset 0 0 0 2px var(--bad); }
+
+  .notice {
+    border-radius: 12px;
+    padding: 10px 12px;
+    margin: 0 0 12px;
+    background: var(--bad-bg);
+    color: var(--bad);
+    font-size: 0.92rem;
+    overflow-wrap: anywhere;
+  }
+  #empty { color: var(--muted); text-align: center; padding: 28px 8px; margin: 0; }
+
+  /* ---------------------------------------------------------------- the list */
+  ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+  li { background: var(--card); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+  .open {
+    display: grid;
+    grid-template-columns: 60px 1fr 14px;
+    gap: 12px;
+    align-items: center;
+    width: 100%;
+    padding: 10px;
+    border: 0;
+    background: transparent;
+    text-align: left;
+  }
+  .open:active { background: var(--thumb); }
+  .open .go { color: var(--muted); font-size: 1.3rem; line-height: 1; }
+  .thumb { width: 60px; height: 80px; border-radius: 6px; background: var(--thumb); object-fit: cover; display: block; }
+  .body { min-width: 0; align-self: start; }
+  .head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .number { font-weight: 700; font-variant-numeric: tabular-nums; }
+  .state { font-size: 0.8rem; font-weight: 600; border-radius: 999px; padding: 2px 10px; white-space: nowrap; }
+  .state.busy { background: var(--busy-bg); color: var(--busy); }
+  .state.done { background: var(--good-bg); color: var(--good); }
+  .state.failed { background: var(--bad-bg); color: var(--bad); }
+  .text {
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    margin: 4px 0 0;
+    font-size: 0.9rem;
+    color: var(--muted);
+    white-space: pre-line;
+    overflow-wrap: anywhere;
+  }
+  .text.reason { color: var(--bad); display: block; }
+  .actions { display: flex; flex-wrap: wrap; gap: 8px; padding: 0 10px 10px 82px; }
+  .actions button, .plain {
+    min-height: 44px;
+    padding: 0 16px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: transparent;
+    font-size: 0.92rem;
+    font-weight: 600;
+  }
+  .actions button.primary { border-color: var(--accent); background: var(--accent); color: var(--accent-ink); }
+
+  /* ---------------------------------------------------------------- the bar with the shutter */
+  .bar {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 3;
+    background: var(--paper);
+    border-top: 1px solid var(--line);
+    padding: 8px 16px calc(10px + env(safe-area-inset-bottom));
+  }
+  .bar .inner { max-width: 32rem; margin: 0 auto; display: grid; grid-template-columns: auto 1fr; gap: 12px; align-items: end; }
+  .bar label { display: block; font-size: 0.75rem; color: var(--muted); margin-bottom: 4px; }
+  .stepper { display: grid; grid-template-columns: 40px 4.2rem 40px; }
+  .stepper button {
+    height: 56px;
+    border: 1px solid var(--line);
+    background: var(--card);
+    font-size: 1.4rem;
+    font-weight: 600;
+    line-height: 1;
+  }
+  .stepper button:first-child { border-radius: 12px 0 0 12px; border-right: 0; }
+  .stepper button:last-child { border-radius: 0 12px 12px 0; border-left: 0; }
+  input[type="number"] {
+    width: 100%;
+    height: 56px;
+    border: 1px solid var(--line);
+    border-radius: 0;
+    background: var(--card);
+    color: var(--ink);
+    font: inherit;
+    font-size: 1.35rem;
+    font-weight: 700;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+    -moz-appearance: textfield;
+    appearance: textfield;
+  }
+  input[type="number"]::-webkit-outer-spin-button,
+  input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+  #take, .shutter {
+    height: 56px;
+    width: 100%;
+    border: 0;
+    border-radius: 12px;
+    background: var(--accent);
+    color: var(--accent-ink);
+    font-size: 1.1rem;
+    font-weight: 700;
+  }
+  #take:active, .shutter:active { filter: brightness(0.92); }
+  #take.retake { background: var(--busy-bg); color: var(--busy); box-shadow: inset 0 0 0 2px var(--busy); }
+
+  /* ---------------------------------------------------------------- one page, opened */
+  /* A column of bar, scrolling middle and foot: nothing in it is position: fixed. */
+  #view {
+    position: fixed;
+    inset: 0;
+    z-index: 5;
+    background: var(--paper);
+    display: flex;
+    flex-direction: column;
+  }
+  #viewscroll { flex: 1; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+  .viewfoot {
+    border-top: 1px solid var(--line);
+    padding: 10px 16px calc(10px + env(safe-area-inset-bottom));
+  }
+  .viewfoot .shutter { display: block; max-width: 32rem; margin: 0 auto; }
+  .viewbar {
+    display: grid;
+    grid-template-columns: auto 1fr auto auto;
+    gap: 8px;
+    align-items: center;
+    padding: calc(8px + env(safe-area-inset-top)) 12px 8px;
+    background: var(--paper);
+    border-bottom: 1px solid var(--line);
+  }
+  .viewbar h2 { font-size: 1.05rem; margin: 0; display: flex; align-items: center; gap: 8px; min-width: 0; }
+  .viewbar .plain { padding: 0 12px; }
+  .viewbar .plain:disabled { opacity: 0.35; }
+  .viewbody { max-width: 40rem; margin: 0 auto; padding: 12px 16px 24px; }
+  .photo { border-radius: 10px; background: var(--thumb); overflow: auto; border: 1px solid var(--line); }
+  .photo img { display: block; width: 100%; height: auto; }
+  .photo.zoomed img { width: 250%; max-width: none; }
+  .photo.none { padding: 28px 12px; text-align: center; color: var(--muted); }
+  .hint { color: var(--muted); font-size: 0.8rem; margin: 6px 0 14px; }
+  #viewtext {
+    font: inherit;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    font-size: 1rem;
+    line-height: 1.55;
+    margin: 0;
+    -webkit-user-select: text;
+    user-select: text;
+  }
+  #viewtext.reason { color: var(--bad); }
+  #viewtext.quiet { color: var(--muted); }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1 id="name">basira capture</h1>
+    <div id="summary" aria-live="polite"></div>
+  </header>
+
+  <p id="offline" class="notice" role="alert" hidden>
+    No connection to basira. Check that the command is still running and that this phone is on the same network.
+  </p>
+  <p id="expired" class="notice" role="alert" hidden>
+    This address is no longer in use: basira capture was started again. Open the new address it shows, or scan its code.
+  </p>
+  <p id="stopped" class="notice" role="alert" hidden></p>
+
+  <p id="empty">No pages yet. Take the first one: one photo is one page.</p>
+  <ol id="pages"></ol>
+</main>
+
+<div class="bar">
+  <div class="inner">
+    <div>
+      <label for="next">Next page</label>
+      <div class="stepper">
+        <button id="less" type="button" aria-label="One page back">&minus;</button>
+        <input id="next" type="number" inputmode="numeric" min="1" max="99999" step="1" autocomplete="off">
+        <button id="more" type="button" aria-label="One page forward">+</button>
+      </div>
+    </div>
+    <button id="take" type="button">Take a page</button>
+  </div>
+</div>
+<!-- The phone's own camera, not a live viewfinder: full resolution, and it works over plain HTTP. -->
+<input id="camera" type="file" accept="image/*" capture="environment" hidden>
+
+<div id="view" role="dialog" aria-modal="true" aria-labelledby="viewtitle" hidden>
+  <div class="viewbar">
+    <button id="viewclose" class="plain" type="button">&lsaquo; Pages</button>
+    <h2 id="viewtitle"><span id="viewnumber"></span><span id="viewstate" class="state"></span></h2>
+    <button id="viewolder" class="plain" type="button" aria-label="The page before">&lsaquo;</button>
+    <button id="viewnewer" class="plain" type="button" aria-label="The page after">&rsaquo;</button>
+  </div>
+  <div id="viewscroll">
+    <div class="viewbody">
+      <div id="viewphoto" class="photo"></div>
+      <p id="viewhint" class="hint">Tap the photo to zoom in and check the letters.</p>
+      <pre id="viewtext"></pre>
+    </div>
+  </div>
+  <div class="viewfoot">
+    <button id="viewretake" class="shutter" type="button">Retake this page</button>
+  </div>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  function $(id) { return document.getElementById(id); }
+  var camera = $("camera"), nextField = $("next"), takeButton = $("take"), list = $("pages");
+
+  var session = { name: "", pages: [], next_page: 1, stopped: null, max_bytes: 0 };
+  // Photos on their way: {page, replace, file, state: waiting|sending|sent|error, error, sentAt,
+  //   before: the version of the page the computer had when the photo was first sent,
+  //   lost: no answer came (the photo may have arrived), conflict: the computer has such a page}
+  var uploads = [];
+  var target = null;       // the page the next photo is for
+  var sending = false;
+  var fieldFilled = false;
+  var onlyFailed = false;  // the list shows only what needs another photo
+  var rows = {};           // page -> its <li>
+  var clock = 0;           // orders uploads and status answers
+  var applied = 0;         // the newest status that was shown
+  var leaving = false;     // the opened page is on its way out
+  var summarised = "";     // what the summary shows now
+  var viewed = null;       // the page that is open, with what was last shown of it
+  var MAX_PAGE = 99999;
+
+  var STATE_TEXT = {
+    waiting: "Uploading", sending: "Uploading", sent: "Waiting", error: "Not uploaded",
+    queued: "Waiting", reading: "Reading", done: "Done", failed: "Failed"
+  };
+  var STATE_KIND = {
+    waiting: "busy", sending: "busy", sent: "busy", error: "failed",
+    queued: "busy", reading: "busy", done: "done", failed: "failed"
+  };
+
+  function onServer(page) { return session.pages.some(function (p) { return p.page === page; }); }
+  function uploadOf(page) { return uploads.filter(function (u) { return u.page === page; })[0]; }
+  function known(page) { return onServer(page) || !!uploadOf(page); }
+  function versionOnServer(page) {
+    var found = session.pages.filter(function (p) { return p.page === page; })[0];
+    return found ? found.version : 0;
+  }
+  function nextFree(after) {
+    var n = after + 1;
+    while (known(n)) n += 1;
+    return Math.min(n, MAX_PAGE);
+  }
+  function sentence(text) {
+    text = String(text);
+    return text.charAt(0).toUpperCase() + text.slice(1) + (/[.!?]$/.test(text) ? "" : ".");
+  }
+
+  // ---------------------------------------------------------------- taking photos
+
+  function fieldPage() {
+    var page = Number(nextField.value);
+    return Number.isInteger(page) && page >= 1 && page <= MAX_PAGE ? page : 0;
+  }
+
+  // The button says what the photo will do: a number that is already there means a retake.
+  // (No confirmation dialog: the camera has to open from the tap itself.)
+  function labelButton() {
+    var page = fieldPage();
+    var retake = page && known(page);
+    takeButton.textContent = retake ? "Retake page " + page : "Take a page";
+    takeButton.classList.toggle("retake", !!retake);
+  }
+
+  function openCamera(page, replace, advance) {
+    target = { page: page, replace: replace, advance: advance };
+    camera.value = "";
+    camera.click();
+  }
+
+  function step(by) {
+    var page = fieldPage() || session.next_page;
+    nextField.value = Math.min(MAX_PAGE, Math.max(1, page + by));
+    labelButton();
+  }
+
+  nextField.addEventListener("input", function () {
+    fieldFilled = true;  // typed before the first status came: the number is the user's
+    labelButton();
+  });
+  $("less").addEventListener("click", function () { step(-1); });
+  $("more").addEventListener("click", function () { step(1); });
+
+  takeButton.addEventListener("click", function () {
+    var page = fieldPage();
+    if (!page) {
+      nextField.focus();
+      return;
+    }
+    openCamera(page, known(page), true);
+  });
+
+  camera.addEventListener("change", function () {
+    var file = camera.files && camera.files[0];
+    var shot = target;
+    target = null;
+    if (!file || !shot) return;
+    uploads = uploads.filter(function (u) { return u.page !== shot.page; });  // a newer photo of the page wins
+    uploads.push({ page: shot.page, replace: shot.replace, file: file, state: "waiting", error: "" });
+    if (shot.advance) {
+      nextField.value = nextFree(shot.page);
+      if (!onlyFailed && !viewed) window.scrollTo(0, 0);  // the page just taken is on top of the list
+    }
+    render();
+    pump();
+  });
+
+  function pump() {
+    if (sending) return;
+    var upload = uploads.filter(function (u) { return u.state === "waiting"; })[0];
+    if (!upload) return;
+    sending = true;
+    upload.state = "sending";
+    render();
+    send(upload).then(function () {
+      // It stays in the list as "sent" until a status that is newer than the upload shows the page.
+      upload.state = "sent";
+      upload.sentAt = ++clock;
+      return refresh();
+    }, function (error) {
+      upload.state = "error";
+      upload.error = error.message;
+      upload.lost = !!error.lost;
+      upload.conflict = !!error.conflict;
+      // The photo may have arrived although its answer did not: ask what the computer has.
+      return refresh();
+    }).then(function () {
+      sending = false;
+      render();
+      pump();
+    });
+  }
+
+  function send(upload) {
+    if (session.max_bytes && upload.file.size > session.max_bytes) {
+      return Promise.reject(new Error("The photo is too large (" + Math.ceil(upload.file.size / 1048576) +
+        " MB; the limit is " + Math.floor(session.max_bytes / 1048576) + " MB)."));
+    }
+    if (upload.before === undefined) upload.before = versionOnServer(upload.page);
+    var url = "upload?page=" + upload.page + (upload.replace ? "&replace=1" : "");
+    return fetch(url, { method: "POST", body: upload.file }).then(function (response) {
+      return response.json().catch(function () { return {}; }).then(function (data) {
+        if (response.ok) return;
+        var refused = new Error(sentence(data.error || "the upload failed (" + response.status + ")"));
+        refused.conflict = response.status === 409;
+        throw refused;
+      });
+    }, function () {
+      var lost = new Error("The photo did not reach basira. Check the connection and send it again.");
+      lost.lost = true;
+      throw lost;
+    });
+  }
+
+  function discard(upload) {
+    uploads = uploads.filter(function (u) { return u !== upload; });
+    // The number is free again: offer it, so that the page is not skipped by accident.
+    if (!known(upload.page) && fieldPage() > upload.page) nextField.value = upload.page;
+    render();
+  }
+
+  // ---------------------------------------------------------------- the list
+
+  function entries() {
+    var byPage = {};
+    session.pages.forEach(function (p) {
+      byPage[p.page] = { page: p.page, state: p.state, text: p.state === "failed" ? p.reason : p.preview,
+                         version: p.version, image: p.image, local: null };
+    });
+    uploads.forEach(function (u) {
+      var entry = byPage[u.page] || { page: u.page, version: 0, image: false };
+      entry.state = u.state;
+      entry.text = u.state === "error" ? u.error : "";
+      entry.local = u;
+      byPage[u.page] = entry;
+    });
+    return Object.keys(byPage).map(function (k) { return byPage[k]; })
+      .sort(function (a, b) { return b.page - a.page; });  // the page just taken is on top
+  }
+
+  function entryOf(page) {
+    return entries().filter(function (e) { return e.page === page; })[0];
+  }
+
+  function button(label, primary, action) {
+    var b = document.createElement("button");
+    b.type = "button";
+    b.textContent = label;
+    if (primary) b.className = "primary";
+    b.addEventListener("click", action);
+    return b;
+  }
+
+  function stateChip(element, state) {
+    element.className = "state " + STATE_KIND[state];
+    element.textContent = STATE_TEXT[state];
+  }
+
+  function build(entry) {
+    var li = document.createElement("li");
+    var open = document.createElement("button");
+    open.type = "button";
+    open.className = "open";
+    open.setAttribute("aria-label", "Open page " + entry.page);
+    open.addEventListener("click", function () { openView(entry.page); });
+
+    var thumb;
+    if (entry.image) {
+      thumb = document.createElement("img");
+      thumb.src = "thumb/" + entry.page + "?v=" + entry.version;
+      thumb.alt = "";
+      thumb.loading = "lazy";
+    } else {
+      thumb = document.createElement("div");
+    }
+    thumb.className = "thumb";
+    open.appendChild(thumb);
+
+    var body = document.createElement("div");
+    body.className = "body";
+    var head = document.createElement("div");
+    head.className = "head";
+    var number = document.createElement("span");
+    number.className = "number";
+    number.textContent = "Page " + entry.page;
+    var state = document.createElement("span");
+    stateChip(state, entry.state);
+    head.appendChild(number);
+    head.appendChild(state);
+    body.appendChild(head);
+
+    var failed = STATE_KIND[entry.state] === "failed";
+    var text = entry.text || (entry.state === "done" ? "No text on this page." : "");
+    if (text) {
+      var p = document.createElement("p");
+      p.className = "text" + (failed ? " reason" : "");
+      p.textContent = failed ? sentence(text) : text;
+      body.appendChild(p);
+    }
+    open.appendChild(body);
+    var go = document.createElement("span");
+    go.className = "go";
+    go.setAttribute("aria-hidden", "true");
+    go.textContent = "›";
+    open.appendChild(go);
+    li.appendChild(open);
+
+    // What needs another photo gets its button right in the list.
+    if (failed) {
+      var actions = document.createElement("div");
+      actions.className = "actions";
+      if (entry.state === "error" && entry.local.conflict) {
+        // The computer has this page from somewhere else: replacing it is said in so many words.
+        actions.appendChild(button("Replace page " + entry.page, true, function () {
+          entry.local.replace = true;
+          entry.local.conflict = false;
+          entry.local.state = "waiting";
+          render();
+          pump();
+        }));
+        actions.appendChild(button("Discard", false, function () { discard(entry.local); }));
+      } else if (entry.state === "error") {
+        actions.appendChild(button("Send again", true, function () {
+          var upload = entry.local;
+          // First ask the computer: the photo may be there already, and then nothing is sent.
+          refresh().then(function () {
+            if (uploads.indexOf(upload) < 0) return;
+            upload.state = "waiting";
+            render();
+            pump();
+          });
+        }));
+        actions.appendChild(button("Take again", false, function () { openCamera(entry.page, true, false); }));
+        actions.appendChild(button("Discard", false, function () { discard(entry.local); }));
+      } else {
+        actions.appendChild(button("Retake", true, function () { openCamera(entry.page, true, false); }));
+      }
+      li.appendChild(actions);
+    }
+    return li;
+  }
+
+  function chip(text, kind) {
+    var c = document.createElement(kind === "failed" ? "button" : "span");
+    c.className = "chip" + (kind ? " " + kind : "");
+    c.textContent = text;
+    return c;
+  }
+
+  function render() {
+    var all = entries();
+    var count = { done: 0, busy: 0, failed: 0 };
+    all.forEach(function (entry) { count[STATE_KIND[entry.state]] += 1; });
+    if (!count.failed) onlyFailed = false;
+    var shown = onlyFailed ? all.filter(function (e) { return STATE_KIND[e.state] === "failed"; }) : all;
+
+    var seen = {};
+    shown.forEach(function (entry, index) {
+      var signature = [entry.state, entry.text, entry.version, entry.image,
+                       !!(entry.local && entry.local.conflict)].join("\u0000");
+      var row = rows[entry.page];
+      if (!row || row.signature !== signature) {
+        var fresh = build(entry);
+        fresh.signature = signature;
+        if (row) list.replaceChild(fresh, row);
+        row = rows[entry.page] = fresh;
+      }
+      if (list.children[index] !== row) list.insertBefore(row, list.children[index] || null);
+      seen[entry.page] = true;
+    });
+    Object.keys(rows).forEach(function (page) {
+      if (!seen[page]) {
+        list.removeChild(rows[page]);
+        delete rows[page];
+      }
+    });
+
+    // Rebuilt only when it changes: it is announced to screen readers and holds a button.
+    var counts = [all.length ? 1 : 0, count.done, count.busy, count.failed, onlyFailed].join();
+    if (counts !== summarised) {
+      summarised = counts;
+      var summary = $("summary");
+      summary.textContent = "";
+      if (all.length) summary.appendChild(chip(count.done + " read", ""));
+      if (count.busy) summary.appendChild(chip(count.busy + " in progress", "busy"));
+      if (count.failed) {
+        var failed = chip(onlyFailed ? "Show all pages" : count.failed + " failed · show", "failed");
+        failed.type = "button";
+        failed.setAttribute("aria-pressed", String(onlyFailed));
+        failed.addEventListener("click", function () {
+          onlyFailed = !onlyFailed;
+          render();
+        });
+        summary.appendChild(failed);
+      }
+    }
+    $("empty").hidden = all.length > 0;
+    labelButton();
+    renderView();
+  }
+
+  // ---------------------------------------------------------------- one page, opened
+
+  function openView(page) {
+    viewed = { page: page, signature: "", text: null, loading: "" };
+    $("view").hidden = false;
+    $("viewscroll").scrollTop = 0;
+    $("viewphoto").classList.remove("zoomed");
+    document.body.classList.add("viewing");
+    // The phone's back gesture closes the page instead of leaving the session.
+    history.pushState({ view: page }, "");
+    renderView();
+  }
+
+  function closeView() {
+    viewed = null;
+    leaving = false;
+    $("view").hidden = true;
+    document.body.classList.remove("viewing");
+  }
+
+  // One step back per opened page, however often it is asked for: the browser goes back
+  // a moment later, and a second step would leave the session.
+  function leaveView() {
+    if (!viewed || leaving) return;
+    leaving = true;
+    history.back();
+  }
+
+  window.addEventListener("popstate", closeView);
+  $("viewclose").addEventListener("click", leaveView);
+  $("viewretake").addEventListener("click", function () {
+    if (viewed) openCamera(viewed.page, true, false);
+  });
+  $("viewphoto").addEventListener("click", function () {
+    $("viewphoto").classList.toggle("zoomed");
+  });
+
+  function neighbour(by) {
+    var pages = entries().map(function (e) { return e.page; }).sort(function (a, b) { return a - b; });
+    var at = pages.indexOf(viewed.page);
+    return at < 0 ? null : pages[at + by] || null;
+  }
+  function turn(by) {
+    var page = viewed && neighbour(by);
+    if (!page) return;
+    viewed = { page: page, signature: "", text: null, loading: "" };
+    $("viewscroll").scrollTop = 0;
+    $("viewphoto").classList.remove("zoomed");
+    renderView();
+  }
+  $("viewolder").addEventListener("click", function () { turn(-1); });
+  $("viewnewer").addEventListener("click", function () { turn(1); });
+
+  function renderView() {
+    if (!viewed) return;
+    var entry = entryOf(viewed.page);
+    if (!entry) {  // discarded meanwhile
+      leaveView();
+      return;
+    }
+    $("viewnumber").textContent = "Page " + entry.page;
+    stateChip($("viewstate"), entry.state);
+    $("viewolder").disabled = !neighbour(-1);
+    $("viewnewer").disabled = !neighbour(1);
+    $("viewretake").textContent = entry.local && entry.state === "error" ? "Take this page again" : "Retake this page";
+
+    var signature = [entry.state, entry.version, entry.image].join("\u0000");
+    if (signature === viewed.signature) return;
+    viewed.signature = signature;
+
+    var photo = $("viewphoto");
+    photo.textContent = "";
+    photo.classList.toggle("none", !entry.image);
+    $("viewhint").hidden = !entry.image;
+    if (entry.image) {
+      var img = document.createElement("img");
+      img.src = "photo/" + entry.page + "?v=" + entry.version;
+      img.alt = "The photo of page " + entry.page;
+      photo.appendChild(img);
+    } else {
+      photo.textContent = entry.local ? "The photo is still on this phone." : "No photo of this page is kept.";
+    }
+
+    var text = $("viewtext");
+    if (entry.state === "done") {
+      // The list has only the first lines: get the whole text.
+      text.className = "quiet";
+      text.textContent = entry.text || "";
+      var page = entry.page, loading = signature;
+      viewed.loading = loading;
+      fetch("page/" + page, { cache: "no-store" }).then(function (response) {
+        if (!response.ok) throw new Error();
+        return response.json();
+      }).then(function (data) {
+        if (!viewed || viewed.page !== page || viewed.loading !== loading) return;
+        text.className = data.text ? "" : "quiet";
+        text.textContent = data.text || "No text on this page.";
+      }).catch(function () {
+        if (viewed && viewed.page === page) viewed.signature = "";  // try again with the next status
+      });
+    } else if (STATE_KIND[entry.state] === "failed") {
+      text.className = "reason";
+      text.textContent = sentence(entry.text || "this page failed");
+    } else {
+      text.className = "quiet";
+      text.textContent = {
+        waiting: "The photo is being sent to the computer.", sending: "The photo is being sent to the computer.",
+        sent: "Waiting for its turn to be read.", queued: "Waiting for its turn to be read.",
+        reading: "The model is reading this page."
+      }[entry.state];
+    }
+  }
+
+  // ---------------------------------------------------------------- the session
+
+  function refresh() {
+    var asked = ++clock;
+    return fetch("status", { cache: "no-store" }).then(function (response) {
+      if (!response.ok) {
+        var problem = new Error("status " + response.status);
+        problem.gone = response.status === 404;  // basira answers, but not under this key any more
+        throw problem;
+      }
+      return response.json();
+    }).then(function (data) {
+      if (asked < applied) return;  // an answer that was overtaken by a newer one
+      applied = asked;
+      session = data;
+      uploads = uploads.filter(function (u) {
+        // Uploads that arrived before this status was asked for are in it.
+        if (u.state === "sent" && u.sentAt < asked) return false;
+        // No answer came, but the computer has a newer photo of the page than before: it arrived.
+        if (u.state === "error" && u.lost && versionOnServer(u.page) > u.before) return false;
+        return true;
+      });
+      $("offline").hidden = true;
+      $("expired").hidden = true;
+      if (!fieldFilled) {
+        nextField.value = data.next_page;
+        fieldFilled = true;
+      }
+      if (data.name) {
+        $("name").textContent = data.name;
+        document.title = data.name + " · basira capture";
+      }
+      $("stopped").hidden = !data.stopped;
+      if (data.stopped) {
+        $("stopped").textContent = "Reading stopped: " + data.stopped + ". Photos you take now are kept. " +
+          "Fix the cause, start basira capture again on the computer and open the new address it shows.";
+      }
+      render();
+    }, function (problem) {
+      var gone = !!(problem && problem.gone);
+      $("offline").hidden = gone;
+      $("expired").hidden = !gone;
+    });
+  }
+
+  function poll() {
+    refresh().then(function () {
+      var busy = uploads.length || session.pages.some(function (p) {
+        return p.state === "queued" || p.state === "reading";
+      });
+      window.setTimeout(poll, busy ? 1500 : 4000);
+    });
+  }
+
+  render();
+  poll();
+})();
+</script>
+</body>
+</html>

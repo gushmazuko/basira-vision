@@ -140,6 +140,58 @@ different value stops the run instead of mixing two configurations in one
 file, and `--resume` never starts a new file. For `translate`, give the
 same `--target-language`: the output file is named after it.
 
+## From paper, with a phone
+
+No scanner and no PDF? `basira capture` makes a phone the input: you
+photograph the pages, and each one is read as soon as it arrives.
+
+```bash
+basira capture mybook --source-language english --strips 3
+```
+
+1. The command prints a QR code and an address. Scan the code with the
+   camera of a phone that is on the same network as the computer, or type
+   the address into its browser.
+2. Tap **Take a page**. The phone's own camera opens; one photo is one page.
+3. Keep shooting, there is no need to wait: pages line up and are read one
+   after another. The list shows every page with a thumbnail, its state and
+   the first lines of its text.
+4. Tap a page to open it: the photo, large enough to check the letters, and
+   the whole text. **Retake** replaces the page with a new photo. A page
+   that failed shows the reason and has its **Retake** button in the list.
+5. Ctrl-C ends the session. The result is the same
+   `workspace/mybook/mybook.md` that `ocr` writes, so `translate` and
+   `typst` work on it unchanged.
+
+Pages are numbered from 1. The **Next page** field holds the number the
+next photo gets: set it to start a book at any page, or to go back and
+insert a page you skipped. With the number of a page that is already there,
+the button becomes **Retake page N**.
+
+The terminal shows how many pages are read, waiting and failed, and a line
+for every finished page with the beginning of its text.
+
+To continue a book, run the same command again. It keeps the book's
+settings, reads the photos that were not read yet and tries the failed
+pages again. An option typed with another value than the book has stops the
+command, as with `ocr --resume`. The photos stay in
+`workspace/mybook/images/`.
+
+Good to know:
+
+- The photo goes to the model as it is, only turned upright. It is not
+  cropped or straightened, so fill the frame with one page.
+- A photo has to be a JPEG or a PNG; that is what a phone's camera gives a
+  browser. Anything else is refused.
+- The numbers in [Accuracy](#accuracy) were measured on scans, not on
+  photos.
+- Review and edit the markdown after the session, not while it runs: the
+  running session writes the whole file after every page.
+- The page is served over plain HTTP and is meant for your own network.
+  The address contains a random key, new on every start, and only a device
+  that was given the address can add pages. To use it from somewhere else,
+  put it behind your own tunnel or VPN.
+
 ## What you see while it runs
 
 <p align="center">
@@ -179,6 +231,34 @@ be chained: `basira translate "$(basira ocr book.pdf)" --target-language russian
 
 Exit codes: `0` done, `3` done but some pages failed, `1` error or stopped,
 `2` invalid usage, `130` paused with Ctrl-C.
+
+### The log file
+
+Whatever the terminal shows, every run is also written down next to the
+file it produces, under the same name with `.log`:
+
+```
+workspace/mybook/mybook.md            mybook.log            ocr, capture
+workspace/mybook/mybook_russian.md    mybook_russian.log    translate, typst
+```
+
+The log has the same timestamped lines as above, one run after another:
+the command as it was typed and the version, the settings, every page,
+retries, failures with their reasons, the tokens each request used, and the
+summary. So after a long run or a session with the phone you can still see
+what happened, and `grep failed mybook.log` finds the pages to look at.
+
+```
+2026-10-27 20:44:20 ocr run     basira=<version> pid=4242 command="basira ocr mybook.pdf --strips 3"
+2026-10-27 20:44:20 ocr start   input=mybook.pdf output=workspace/mybook/mybook.md pages=300 todo=300 info="…"
+2026-10-27 20:44:31 ocr ok      page=5 progress=5/300 took=2.1s eta=9:58
+2026-10-27 20:44:33 ocr retry   page=6 attempt=1/2 wait=1s reason="HTTP 500 INTERNAL"
+```
+
+The text of the pages and the API key are never written to it. `--verbose`
+adds the debug details to the log as well as to the terminal. A run that
+fails before it has created anything leaves no log either, and
+`--no-log` turns the log off.
 
 ## Why not just…
 
@@ -240,7 +320,8 @@ startup: it must be the service root, without `/v1`, `/v1beta` or `/openai`.
 ## Usage
 
 Every command documents its options: `basira <command> --help`. All of
-them also take `--log-format auto|live|plain|json` and `-v`/`--verbose`.
+them also take `--log-format auto|live|plain|json` (what the terminal
+shows), `-v`/`--verbose` and `--no-log` (see [The log file](#the-log-file)).
 
 ### `basira ocr PDF_FILE`
 
@@ -288,6 +369,19 @@ between has to allow that. The measurements are in [Accuracy](#accuracy).
 
 `--thinking-level` and `--media-resolution` need a model that supports them
 (Gemini 3 and later); a gateway has to pass them through.
+
+### `basira capture NAME`
+
+`NAME` is the name of the book: the output is `<workspace>/NAME/NAME.md`.
+
+| Option | Purpose |
+|--------|---------|
+| `--source-language`, `--strips`, `--thinking-level`, `--media-resolution`, `--model`, `--custom-prompt`, `--prompts-dir`, `--output-dir` | the same as for `ocr` |
+| `--host` | address to listen on (default `0.0.0.0`: every network interface of the computer) |
+| `--port` | port to listen on (default 8765; `0` takes any free port) |
+
+There is no `--resume` or `--overwrite`: an existing book is always
+continued, and a page is replaced only when you retake it on the phone.
 
 ### `basira translate MARKDOWN_FILE`
 
@@ -394,7 +488,8 @@ translate and publish.
 Page images and text are sent to the model endpoint you configure (Google's
 API by default). Do not process confidential documents with a service you do
 not trust. The tool has no telemetry; the API key is only used to call that
-endpoint.
+endpoint. The log file a run keeps stays on your disk, next to the book, and
+holds neither the text of the pages nor the key.
 
 ## Documentation
 

@@ -175,6 +175,11 @@ class PageFile:
         self.pages[number] = Page(number, "", _clean_reason(reason))
         self._save()
 
+    def remove_page(self, number: int) -> None:
+        """Drop a page that is about to be produced again, and save the file."""
+        if self.pages.pop(number, None) is not None:
+            self._save()
+
     def set_field(self, key: str, value: Any) -> None:
         """Set a frontmatter field (only the frontmatter is touched) and save."""
         line = f"{key}: {_yaml_value(value)}"

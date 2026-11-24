@@ -4,7 +4,16 @@ import time
 from collections import deque
 from typing import Dict, Optional, Set
 
-from .events import PageDone, PageFailed, PageRetrying, PageStarted, RunStarted
+from .events import (
+    CaptureStarted,
+    PageDone,
+    PageFailed,
+    PageRetrying,
+    PageStarted,
+    PhotoReceived,
+    ReadingStopped,
+    RunStarted,
+)
 
 ETA_WINDOW = 12  # pages in the moving average
 
@@ -53,11 +62,30 @@ class RunState:
         self.retries = 0
         self.stopping = False
         self.started_at = time.monotonic()
+        # A capture session: no total, pages arrive while it runs.
+        self.open_ended = isinstance(started, CaptureStarted)
+        self.waiting: Set[int] = set(started.todo) if self.open_ended else set()
+        if self.open_ended:
+            self.failed.update(started.failed_before)
+        self.reading_stopped: Optional[str] = None
+        self.active_since = self.started_at
         self._durations = deque(maxlen=ETA_WINDOW)
 
     def apply(self, event) -> None:
         if isinstance(event, PageStarted):
             self.active, self.activity, self.retry = event.page, event.activity, None
+            self.active_since = time.monotonic()
+            self.waiting.discard(event.page)
+        elif isinstance(event, PhotoReceived):
+            self.waiting.add(event.page)  # a retake: the page is no longer done or failed
+            self.done.discard(event.page)
+            self.done_before.discard(event.page)
+            self.failed.pop(event.page, None)
+        elif isinstance(event, ReadingStopped):
+            self.reading_stopped = event.reason
+            if self.active is not None:  # the page in flight goes back in line
+                self.waiting.add(self.active)
+                self.active, self.retry = None, None
         elif isinstance(event, PageRetrying):
             self.retry, self.retry_until = event, time.monotonic() + event.wait
             self.retries += 1
@@ -72,6 +100,7 @@ class RunState:
     def _finish_page(self, seconds: float) -> None:
         self._durations.append(seconds)
         self.active, self.retry = None, None
+        self.waiting.difference_update(self.done, self.failed)
 
     @property
     def completed(self) -> int:
@@ -86,7 +115,7 @@ class RunState:
 
     def eta(self) -> Optional[float]:
         remaining = len(self.todo) - self.processed
-        if not self._durations or remaining <= 0:
+        if not self._durations or remaining <= 0 or self.open_ended:  # no end to count down to
             return None
         return remaining * sum(self._durations) / len(self._durations)
 

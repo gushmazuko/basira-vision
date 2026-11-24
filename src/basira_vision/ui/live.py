@@ -1,6 +1,7 @@
 """Interactive terminal view: a pinned status block with notable events scrolling above it."""
 
 import math
+import time
 from typing import List, Optional
 
 from rich.console import Console, Group
@@ -11,23 +12,31 @@ from rich.table import Table
 from rich.text import Text
 
 from .events import (
+    CaptureStarted,
     ErrorReported,
     Hint,
     Notice,
     PageDone,
     PageFailed,
+    PageRead,
     PageStarted,
+    ReadingStopped,
     RunFinished,
     RunStarted,
     StepDone,
     StepStarted,
     StopRequested,
+    kinds,
 )
+from .qr import QUIET_ZONE, QRCode, encode
 from .state import RunState, format_duration, pages_label
 
 ACCENT, DIM = "cyan", "grey50"
 DONE, DONE_BEFORE, FAILED, ACTIVE, PENDING = "green", "dark_green", "red", "yellow", "grey30"
 MAX_FAILED_ROWS = 8
+# Lines a capture session shows below its QR code: the pinned status (3) and the address, or
+# those plus the spacing and the two lines of instructions.
+_BELOW_COMPACT, _BELOW_ROOMY = 4, 8
 
 
 class PageMap:
@@ -88,7 +97,7 @@ class LiveRenderer:
     # ------------------------------------------------------------------ lifecycle
 
     def emit(self, event) -> None:
-        handler = getattr(self, f"_on_{type(event).__name__}", None)
+        handler = next((h for h in (getattr(self, f"_on_{k.__name__}", None) for k in kinds(event)) if h), None)
         if self.state is not None:
             self.state.apply(event)
         if handler:
@@ -120,6 +129,11 @@ class LiveRenderer:
 
     def _on_RunStarted(self, event: RunStarted) -> None:
         self.state = RunState(event)
+        self._header(event)
+        self._title()
+        self._start_live()
+
+    def _header(self, event: RunStarted) -> None:
         line = Text()
         line.append(f"basira {event.stage}  ", f"bold {ACCENT}")
         line.append(event.source, "bold")
@@ -127,8 +141,57 @@ class LiveRenderer:
         line.append(event.output, "bold")
         self._print(line)
         self._print(Text(" " * (len(event.stage) + 9) + event.details, DIM))
-        self._title()
+
+    def _on_CaptureStarted(self, event: CaptureStarted) -> None:
+        self.state = RunState(event)
+        self._header(event)
+        self._print(Text(""))
+        code = encode(event.url)
+        size = len(code) + 2 * QUIET_ZONE if code is not None else 0
+        rows = (size + 1) // 2
+        note = "The phone has to be on the same network as this computer. Ctrl-C ends the session."
+        # The code is only of use when all of it is on the screen together with what follows it.
+        if code is None or size + 2 > self.console.width or rows + _BELOW_COMPACT > self.console.height:
+            self._print(Text("  Open this address in the phone's browser:"))
+            self._address(event.url)
+            self._print(Text(f"  {note}", DIM))
+        elif rows + _BELOW_ROOMY > self.console.height:  # a low terminal: the code last, little below it
+            self._print(Text("  Scan the code with the phone's camera, or open the address below it "
+                             "in its browser."))
+            self._print(Text(f"  {note}", DIM))
+            self._print(QRCode(code))
+            self._address(event.url)
+        else:
+            self._print(QRCode(code))
+            self._print(Text(""))
+            self._print(Text("  Scan the code with the phone's camera, or open this address in its browser:"))
+            self._address(event.url)
+            self._print(Text(f"  {note}", DIM))
+            self._print(Text(""))
+        self.console.set_window_title(f"basira {event.stage}")
         self._start_live()
+
+    def _address(self, url: str) -> None:
+        # Never wrapped: an address broken over two lines cannot be copied or clicked.
+        self.console.print(Text(f"  {url}", f"bold {ACCENT}"), soft_wrap=True)
+
+    def _on_PageRead(self, event: PageRead) -> None:
+        self._flush_failures()
+        line = Text.assemble(("  ✓ ", DONE), (f"page {event.page}", "bold"),
+                             (f"  {format_duration(event.seconds)}", DIM))
+        first = event.preview.splitlines()[0] if event.preview else "no text on this page"
+        first = "".join(c for c in first if c.isprintable())  # the model's text, not terminal commands
+        room = self.console.width - line.cell_len - 3
+        if room > 10:
+            line.append("  ")
+            line.append(Text(first, DIM, no_wrap=True, overflow="ellipsis", end=""))
+            line.truncate(self.console.width - 1, overflow="ellipsis")
+        self._print(line)
+
+    def _on_ReadingStopped(self, event: ReadingStopped) -> None:
+        self._flush_failures()
+        self._print(Text.assemble(("  ! ", f"bold {ACTIVE}"), (f"reading stopped: {event.reason}", ACTIVE)))
+        self._print(Text("    photos taken from now on are kept; fix the cause and run the command again", DIM))
 
     def _on_PageStarted(self, event: PageStarted) -> None:
         self._title()
@@ -241,6 +304,8 @@ class LiveRenderer:
         state = self.state
         if state is not None and state.total:
             parts.append(self._progress_line(state))
+        elif state is not None and state.open_ended:
+            parts.append(self._capture_line(state))
         activity = self._activity()
         if activity is not None:
             row = Table.grid(padding=(0, 1))
@@ -263,6 +328,29 @@ class LiveRenderer:
         line.add_row(PageMap(state), counts, timing)
         return line
 
+    def _capture_line(self, state: RunState) -> Text:
+        """``12 read · 2 waiting · 1 failed   5:03``, and what the session waits for when it is idle."""
+        line = Text(" ")
+        line.append(f" {state.completed}", "bold")
+        line.append(" read", DIM)
+        if state.waiting:
+            line.append("  ·  ", DIM)
+            line.append(str(len(state.waiting)), f"bold {ACTIVE}")
+            line.append(" waiting", DIM)
+        if state.failed:
+            line.append("  ·  ", DIM)
+            line.append(f"✗ {len(state.failed)} failed", FAILED)
+        line.append(f"   {format_duration(state.elapsed())}", DIM)
+        if state.active is None:
+            if state.reading_stopped:
+                idle = "reading stopped; photos are still taken and kept · Ctrl-C ends the session"
+            elif state.stopping:
+                idle = "ending the session"
+            else:
+                idle = "ready for photos · Ctrl-C ends the session"
+            line.append(f"\n  {idle}", ACTIVE if state.reading_stopped else DIM)
+        return line
+
     def _activity(self) -> Optional[Text]:
         state = self.state
         if self.step:
@@ -282,6 +370,8 @@ class LiveRenderer:
         if state.activity:
             text.append(" · ")
             text.append_text(Text.from_markup(state.activity, style=DIM))
+        if state.open_ended:
+            text.append(f" · {format_duration(time.monotonic() - state.active_since)}", DIM)
         return text
 
     def _title(self) -> None:
